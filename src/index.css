@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand palette, sourced from the HerNext design screenshots */
+  --color-plum-950: #2a1330;
+  --color-plum-900: #3a1a3f;
+  --color-plum-800: #4a2350;
+  --color-plum-700: #5c2e60;
+  --color-plum-600: #7a3f7f;
+
+  --color-blush-50: #fdf3f6;
+  --color-blush-100: #faeaef;
+  --color-blush-200: #f6dde6;
+
+  --color-peach-50: #fdf0ec;
+  --color-peach-100: #fbe2da;
+  --color-peach-300: #f0aa8e;
+
+  --color-ink: #1c1120;
+  --color-body: #6b6375;
+  --color-hairline: #ece6ec;
+
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-body);
+  background: #fff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
