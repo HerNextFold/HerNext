@@ -20,6 +20,54 @@ import {
 import PurpleBackgroundDots from '../components/dashboard/PurpleBackgroundDots'
 import Button from '../components/Button'
 import { useUserContext } from '../context/UserContext'
+import { ApiError, createExperience, updateProfile, type EmploymentType } from '../lib/api'
+
+/**
+ * Maps the Onboarding "work situation" button-group value to the backend's
+ * employmentType enum. No exact match exists for every option, so the
+ * closest reasonable enum value is used (see project decision).
+ */
+function mapWorkSituationToEmploymentType(workSituation: string): EmploymentType {
+  switch (workSituation) {
+    case 'Full-time':
+      return 'EMPLOYED'
+    case 'Part-time':
+      return 'EMPLOYED'
+    case 'Freelance':
+      return 'FREELANCER'
+    case 'Self-employed':
+      return 'SELF_EMPLOYED'
+    case 'Student':
+      return 'STUDENT'
+    case 'Career break':
+      return 'UNEMPLOYED'
+    case 'Other / Transitional':
+      return 'UNEMPLOYED'
+    default:
+      return 'UNEMPLOYED'
+  }
+}
+
+/**
+ * Maps the Onboarding "years of experience" range option to the explicit
+ * numeric value the backend requires.
+ */
+function mapYearsExperienceToNumber(yearsExperience: string): number {
+  switch (yearsExperience) {
+    case '0–1 years':
+      return 0
+    case '1–3 years':
+      return 2
+    case '3–5 years':
+      return 4
+    case '5–8 years':
+      return 6
+    case '8+ years':
+      return 8
+    default:
+      return 0
+  }
+}
 
 // ==========================================
 // DYNAMIC CAREER DATABASE & ROLE ADAPTATION
@@ -291,20 +339,50 @@ export default function Onboarding() {
     'Remote / Hybrid',
   ])
 
-  const handleFinishOnboarding = () => {
-    updateOnboarding({
-      currentRole,
-      yearsOfExperience: yearsExperience,
-      workSituation,
-      industry,
-      education,
-      skills: selectedSkills.map((name) => ({ name, level: 'Advanced', category: 'Technical' })),
-      goalType: goalDirection.toLowerCase().includes('new role') ? 'Transition' : 'Growth',
-      targetRole: targetRole || activeRolePreset.suggestedTargetRoles[0] || 'AI Engineer',
-      aiAnalysis: `High capability transfer from ${currentRole} to ${targetRole || 'AI Role'}.`,
-      isOnboarded: true,
-    })
-    navigate('/dashboard/insights')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+
+  const handleFinishOnboarding = async () => {
+    if (isSubmitting) return
+    setSubmitError('')
+    setIsSubmitting(true)
+
+    const employmentType = mapWorkSituationToEmploymentType(workSituation)
+    const yearsOfExperience = mapYearsExperienceToNumber(yearsExperience)
+
+    try {
+      await updateProfile({
+        currentOccupation: currentRole,
+        industry,
+        yearsOfExperience,
+        employmentType,
+        education,
+      })
+
+      await createExperience({
+        title: currentRole,
+        description: practicalExperience,
+        employmentType,
+      })
+
+      updateOnboarding({
+        currentRole,
+        yearsOfExperience: yearsExperience,
+        workSituation,
+        industry,
+        education,
+        skills: selectedSkills.map((name) => ({ name, level: 'Advanced', category: 'Technical' })),
+        goalType: goalDirection.toLowerCase().includes('new role') ? 'Transition' : 'Growth',
+        targetRole: targetRole || activeRolePreset.suggestedTargetRoles[0] || 'AI Engineer',
+        aiAnalysis: `High capability transfer from ${currentRole} to ${targetRole || 'AI Role'}.`,
+        isOnboarded: true,
+      })
+
+      navigate('/dashboard/insights')
+    } catch (err) {
+      setSubmitError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
+      setIsSubmitting(false)
+    }
   }
 
   // Step 7 Analysis Radar Orbit State
@@ -1447,15 +1525,29 @@ export default function Onboarding() {
                       </p>
                     </div>
 
+                    {submitError && (
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                        {submitError}
+                      </div>
+                    )}
+
                     <Button
                       variant="primary"
                       onClick={handleFinishOnboarding}
+                      disabled={isSubmitting}
                       className="w-full py-3.5 text-sm font-bold shadow-lg transition-transform active:scale-[0.99]"
                     >
-                      <span className="inline-flex items-center justify-center gap-2">
-                        See My Career Insights
-                        <ArrowRight size={18} />
-                      </span>
+                      {isSubmitting ? (
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                          Saving your profile...
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center justify-center gap-2">
+                          See My Career Insights
+                          <ArrowRight size={18} />
+                        </span>
+                      )}
                     </Button>
                   </motion.div>
                 )}

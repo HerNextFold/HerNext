@@ -1,17 +1,26 @@
 import { useState } from 'react'
 
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Eye, EyeOff, Lock, Mail, User } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Globe, Lock, Mail, User } from 'lucide-react'
 import AuthLayout from '../components/auth/AuthLayout'
 import GoogleButton from '../components/auth/GoogleButton'
 import Button from '../components/Button'
 import { useUserContext } from '../context/UserContext'
+import { ApiError, registerUser } from '../lib/api'
+
+function splitFullName(fullName: string): { firstName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/)
+  const firstName = parts[0] ?? ''
+  const lastName = parts.slice(1).join(' ') || firstName
+  return { firstName, lastName }
+}
 
 export default function SignUp() {
   const navigate = useNavigate()
   const { updateUser } = useUserContext()
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+  const [country, setCountry] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeTerms, setAgreeTerms] = useState(true)
@@ -27,11 +36,11 @@ export default function SignUp() {
     navigate('/onboarding');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!fullName || !email || !password || !confirmPassword) {
+    if (!fullName || !email || !country || !password || !confirmPassword) {
       setError('Please fill in all required fields.');
       return;
     }
@@ -48,67 +57,25 @@ export default function SignUp() {
 
     setIsLoading(true);
 
-    // Save actual user credentials to context
-    updateUser({ fullName: fullName.trim(), email: email.trim() });
-
-    // Simulate signup process, then navigate to Onboarding page
-    setTimeout(() => {
-      setIsLoading(false);
-      navigate('/onboarding');
-    }, 600);
-  };
-
-import type { ChangeEvent, FormEvent } from 'react'
-import { Loader2 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
-import Button from '../components/Button'
-import { ApiError, registerUser } from '../lib/api'
-
-interface SignUpForm {
-  firstName: string
-  lastName: string
-  email: string
-  password: string
-  country: string
-}
-
-const initialForm: SignUpForm = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  password: '',
-  country: '',
-}
-
-export default function SignUp() {
-  const navigate = useNavigate()
-  const [form, setForm] = useState<SignUpForm>(initialForm)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  function handleChange(field: keyof SignUpForm) {
-    return (event: ChangeEvent<HTMLInputElement>) => {
-      setForm((prev) => ({ ...prev, [field]: event.target.value }))
-    }
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (isSubmitting) return
-
-    setError(null)
-    setIsSubmitting(true)
     try {
-      const { accessToken } = await registerUser(form)
-      localStorage.setItem('accessToken', accessToken)
-      navigate('/')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+      const { firstName, lastName } = splitFullName(fullName)
+      await registerUser({
+        firstName,
+        lastName,
+        email: email.trim(),
+        password,
+        country: country.trim(),
+      })
 
+      // Registration succeeded but the account is still UNVERIFIED - the
+      // backend does not issue an access token here. Send the participant
+      // to the OTP screen to verify their email before they can log in.
+      navigate(`/verify-email?email=${encodeURIComponent(email.trim())}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setIsLoading(false);
+    }
+  };
 
   return (
     <AuthLayout
@@ -126,7 +93,6 @@ export default function SignUp() {
             Take the first step towards your next career move.
           </p>
         </div>
-
 
         {/* Social Auth */}
         <GoogleButton
@@ -186,6 +152,26 @@ export default function SignUp() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
+                className="w-full rounded-xl border border-hairline bg-slate-50/50 py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-plum-600 focus:bg-white focus:ring-2 focus:ring-plum-500/20"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-ink/80">
+              Country
+            </label>
+            <div className="relative mt-1.5">
+              <Globe
+                size={18}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-body/50"
+              />
+              <input
+                type="text"
+                required
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                placeholder="Nigeria"
                 className="w-full rounded-xl border border-hairline bg-slate-50/50 py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-plum-600 focus:bg-white focus:ring-2 focus:ring-plum-500/20"
               />
             </div>
@@ -281,89 +267,6 @@ export default function SignUp() {
                 Create my HerNext account
                 <ArrowRight size={16} />
               </span>
-
-        {error && (
-          <p
-            role="alert"
-            className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-          >
-            {error}
-          </p>
-        )}
-
-        <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-sm text-ink">
-              First name
-              <input
-                type="text"
-                required
-                placeholder="Jane"
-                value={form.firstName}
-                onChange={handleChange('firstName')}
-                disabled={isSubmitting}
-                className="mt-1 w-full rounded-lg border border-hairline px-3 py-2 text-sm text-ink outline-none focus:border-plum-700 disabled:opacity-60"
-              />
-            </label>
-            <label className="text-sm text-ink">
-              Last name
-              <input
-                type="text"
-                required
-                placeholder="Doe"
-                value={form.lastName}
-                onChange={handleChange('lastName')}
-                disabled={isSubmitting}
-                className="mt-1 w-full rounded-lg border border-hairline px-3 py-2 text-sm text-ink outline-none focus:border-plum-700 disabled:opacity-60"
-              />
-            </label>
-          </div>
-          <label className="text-sm text-ink">
-            Email
-            <input
-              type="email"
-              required
-              placeholder="you@example.com"
-              value={form.email}
-              onChange={handleChange('email')}
-              disabled={isSubmitting}
-              className="mt-1 w-full rounded-lg border border-hairline px-3 py-2 text-sm text-ink outline-none focus:border-plum-700 disabled:opacity-60"
-            />
-          </label>
-          <label className="text-sm text-ink">
-            Password
-            <input
-              type="password"
-              required
-              minLength={8}
-              placeholder="••••••••"
-              value={form.password}
-              onChange={handleChange('password')}
-              disabled={isSubmitting}
-              className="mt-1 w-full rounded-lg border border-hairline px-3 py-2 text-sm text-ink outline-none focus:border-plum-700 disabled:opacity-60"
-            />
-          </label>
-          <label className="text-sm text-ink">
-            Country
-            <input
-              type="text"
-              required
-              placeholder="Nigeria"
-              value={form.country}
-              onChange={handleChange('country')}
-              disabled={isSubmitting}
-              className="mt-1 w-full rounded-lg border border-hairline px-3 py-2 text-sm text-ink outline-none focus:border-plum-700 disabled:opacity-60"
-            />
-          </label>
-          <Button type="submit" variant="primary" className="mt-2 w-full" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                Creating account...
-              </>
-            ) : (
-              'Create account'
-
             )}
           </Button>
         </form>

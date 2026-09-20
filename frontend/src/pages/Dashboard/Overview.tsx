@@ -1,18 +1,47 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { 
-  Target, 
-  Sparkles, 
-  Zap, 
-  ArrowRight, 
-  Activity, 
-  Cpu, 
-  Heart, 
+import {
+  Target,
+  Sparkles,
+  Zap,
+  ArrowRight,
+  Activity,
+  Cpu,
+  Heart,
   CheckCircle2
 } from 'lucide-react';
 import { useDashboardContext } from '../../context/DashboardContext';
 import { useUserContext } from '../../context/UserContext';
+import {
+  ApiError,
+  getCareerRecommendations,
+  getProgressSummary,
+  type CareerRecommendation,
+  type ImpactLevel,
+  type ProgressSummary,
+} from '../../lib/api';
+
+/** Loading: ellipsis. Missing/unavailable: em dash. Otherwise: rounded percent. */
+function formatPercent(isLoading: boolean, value: number | undefined | null): string {
+  if (isLoading) return '…'
+  if (value === undefined || value === null) return '—'
+  return `${Math.round(value)}%`
+}
+
+function formatImpactLevelLabel(isLoading: boolean, level: ImpactLevel | undefined): string {
+  if (isLoading) return '…'
+  switch (level) {
+    case 'LOW':
+      return 'Low'
+    case 'MODERATE':
+      return 'Moderate'
+    case 'HIGH':
+      return 'High'
+    default:
+      return 'Not yet'
+  }
+}
 
 const Overview: React.FC = () => {
   const { careerData } = useDashboardContext();
@@ -28,6 +57,41 @@ const Overview: React.FC = () => {
     yearsExperience: onboarding.yearsOfExperience || '3-5 years',
     topSkills: onboarding.skills && onboarding.skills.length > 0 ? onboarding.skills.map(s => s.name).join(', ') : 'React, TypeScript, Next.js'
   };
+
+  const [summary, setSummary] = useState<ProgressSummary | null>(null);
+  const [topRecommendation, setTopRecommendation] = useState<CareerRecommendation | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboardData() {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const [summaryData, recommendationsData] = await Promise.all([
+          getProgressSummary(),
+          getCareerRecommendations(1),
+        ]);
+        if (cancelled) return;
+        setSummary(summaryData);
+        setTopRecommendation(recommendationsData.recommendations[0] ?? null);
+      } catch (err) {
+        if (cancelled) return;
+        setLoadError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    void loadDashboardData();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const targetRoleName = topRecommendation?.careerName ?? summary?.currentCareerGoal ?? displayData.targetRole;
 
   // Animation variants
   const container: any = {
@@ -74,7 +138,13 @@ const Overview: React.FC = () => {
           </motion.button>
         </div>
       </motion.div>
-      
+
+      {loadError && (
+        <motion.div variants={item} className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+          {loadError}
+        </motion.div>
+      )}
+
       {/* Top Row: Readiness & Target Role */}
       <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Readiness Overview */}
@@ -90,16 +160,16 @@ const Overview: React.FC = () => {
              <div className="relative w-32 h-32 flex-shrink-0">
                <svg className="w-full h-full transform -rotate-90">
                  <circle cx="64" cy="64" r="54" fill="transparent" stroke="#F4EFF7" strokeWidth="11" />
-                 <motion.circle 
+                 <motion.circle
                    initial={{ strokeDashoffset: 339.29 }}
-                   animate={{ strokeDashoffset: 339.29 - (339.29 * 78) / 100 }}
+                   animate={{ strokeDashoffset: 339.29 - (339.29 * (summary?.careerReadiness ?? 0)) / 100 }}
                    transition={{ duration: 1.5, ease: "easeOut" }}
-                   cx="64" cy="64" r="54" fill="transparent" stroke="#8C3F96" strokeWidth="11" strokeDasharray="339.29" 
+                   cx="64" cy="64" r="54" fill="transparent" stroke="#8C3F96" strokeWidth="11" strokeDasharray="339.29"
                    strokeLinecap="round"
                  />
                </svg>
                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                 <span className="text-3xl font-black text-[#2D1B4E]">78%</span>
+                 <span className="text-3xl font-black text-[#2D1B4E]">{formatPercent(isLoading, summary?.careerReadiness)}</span>
                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Ready</span>
                </div>
              </div>
@@ -108,40 +178,40 @@ const Overview: React.FC = () => {
                <div>
                  <div className="flex justify-between text-xs mb-1">
                    <span className="font-semibold text-gray-700">Core Experience</span>
-                   <span className="font-bold text-[#2D1B4E]">80%</span>
+                   <span className="font-bold text-[#2D1B4E]">{formatPercent(isLoading, summary?.readinessBreakdown.experience)}</span>
                  </div>
                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                   <motion.div initial={{ width: 0 }} animate={{ width: '80%' }} transition={{ duration: 1, delay: 0.2 }} className="bg-[#5C3D6D] h-full rounded-full"></motion.div>
+                   <motion.div initial={{ width: 0 }} animate={{ width: `${summary?.readinessBreakdown.experience ?? 0}%` }} transition={{ duration: 1, delay: 0.2 }} className="bg-[#5C3D6D] h-full rounded-full"></motion.div>
                  </div>
                </div>
 
                <div>
                  <div className="flex justify-between text-xs mb-1">
                    <span className="font-semibold text-gray-700">Skills Alignment</span>
-                   <span className="font-bold text-[#2D1B4E]">72%</span>
+                   <span className="font-bold text-[#2D1B4E]">{formatPercent(isLoading, summary?.readinessBreakdown.skills)}</span>
                  </div>
                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                   <motion.div initial={{ width: 0 }} animate={{ width: '72%' }} transition={{ duration: 1, delay: 0.3 }} className="bg-[#5C3D6D] h-full rounded-full"></motion.div>
+                   <motion.div initial={{ width: 0 }} animate={{ width: `${summary?.readinessBreakdown.skills ?? 0}%` }} transition={{ duration: 1, delay: 0.3 }} className="bg-[#5C3D6D] h-full rounded-full"></motion.div>
                  </div>
                </div>
 
                <div>
                  <div className="flex justify-between text-xs mb-1">
                    <span className="font-semibold text-gray-700">AI Tooling Proficiency</span>
-                   <span className="font-bold text-[#F05A7E]">90%</span>
+                   <span className="font-bold text-[#F05A7E]">{formatPercent(isLoading, summary?.readinessBreakdown.aiReadiness)}</span>
                  </div>
                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                   <motion.div initial={{ width: 0 }} animate={{ width: '90%' }} transition={{ duration: 1, delay: 0.4 }} className="bg-gradient-to-r from-[#F05A7E] to-[#FF8E53] h-full rounded-full"></motion.div>
+                   <motion.div initial={{ width: 0 }} animate={{ width: `${summary?.readinessBreakdown.aiReadiness ?? 0}%` }} transition={{ duration: 1, delay: 0.4 }} className="bg-gradient-to-r from-[#F05A7E] to-[#FF8E53] h-full rounded-full"></motion.div>
                  </div>
                </div>
 
                <div>
                  <div className="flex justify-between text-xs mb-1">
                    <span className="font-semibold text-gray-700">Portfolio Evidence</span>
-                   <span className="font-bold text-[#2D1B4E]">65%</span>
+                   <span className="font-bold text-[#2D1B4E]">{formatPercent(isLoading, summary?.readinessBreakdown.evidence)}</span>
                  </div>
                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                   <motion.div initial={{ width: 0 }} animate={{ width: '65%' }} transition={{ duration: 1, delay: 0.5 }} className="bg-[#5C3D6D] h-full rounded-full"></motion.div>
+                   <motion.div initial={{ width: 0 }} animate={{ width: `${summary?.readinessBreakdown.evidence ?? 0}%` }} transition={{ duration: 1, delay: 0.5 }} className="bg-[#5C3D6D] h-full rounded-full"></motion.div>
                  </div>
                </div>
              </div>
@@ -155,7 +225,7 @@ const Overview: React.FC = () => {
               <Target size={24} />
             </div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Target Role</p>
-            <h3 className="text-xl font-black text-[#2D1B4E] mb-2">{displayData.targetRole}</h3>
+            <h3 className="text-xl font-black text-[#2D1B4E] mb-2">{targetRoleName}</h3>
             {displayData.company && (
               <span className="text-xs text-purple-700 font-semibold bg-purple-50 px-2.5 py-0.5 rounded-full">
                 @ {displayData.company}
@@ -163,7 +233,7 @@ const Overview: React.FC = () => {
             )}
 
             <div className="flex items-center justify-center gap-3 my-4">
-               <span className="text-3xl font-black text-[#8C3F96]">91%</span>
+               <span className="text-3xl font-black text-[#8C3F96]">{formatPercent(isLoading, topRecommendation?.matchScore)}</span>
                <span className="text-[10px] text-gray-500 text-left leading-tight font-medium">Predicted<br/>Career Match</span>
             </div>
           </div>
@@ -203,8 +273,8 @@ const Overview: React.FC = () => {
                <p className="text-xs text-gray-600">How generative automation is reshaping your daily workflow in 2026.</p>
              </div>
              <div className="text-right">
-               <span className="text-2xl font-black text-[#F05A7E]">42%</span>
-               <p className="text-[10px] text-gray-500 leading-tight mt-0.5 font-medium">Moderate<br/>Task Impact</p>
+               <span className="text-2xl font-black text-[#F05A7E]">{formatPercent(isLoading, summary?.aiImpact?.score)}</span>
+               <p className="text-[10px] text-gray-500 leading-tight mt-0.5 font-medium">{formatImpactLevelLabel(isLoading, summary?.aiImpact?.level)}<br/>Task Impact</p>
              </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

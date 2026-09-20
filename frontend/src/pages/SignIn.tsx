@@ -5,6 +5,7 @@ import AuthLayout from '../components/auth/AuthLayout'
 import GoogleButton from '../components/auth/GoogleButton'
 import Button from '../components/Button'
 import { useUserContext, formatNameFromEmail } from '../context/UserContext'
+import { ApiError, loginUser } from '../lib/api'
 
 export default function SignIn() {
   const navigate = useNavigate()
@@ -14,6 +15,7 @@ export default function SignIn() {
   const [rememberMe, setRememberMe] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [unverifiedEmail, setUnverifiedEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
   const handleGoogleAuth = () => {
@@ -22,9 +24,10 @@ export default function SignIn() {
     navigate('/dashboard');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setUnverifiedEmail('')
 
     if (!email || !password) {
       setError('Please enter your email and password.')
@@ -33,15 +36,25 @@ export default function SignIn() {
 
     setIsLoading(true)
 
-    // Save actual user login info to context
     const cleanEmail = email.trim();
-    updateUser({ email: cleanEmail, fullName: formatNameFromEmail(cleanEmail) });
 
-    // Existing user logging in: navigate DIRECTLY to dashboard
-    setTimeout(() => {
-      setIsLoading(false)
+    try {
+      const { user, accessToken } = await loginUser({ email: cleanEmail, password })
+      localStorage.setItem('accessToken', accessToken)
+      updateUser({
+        email: user.email,
+        fullName: `${user.firstName} ${user.lastName}`.trim() || formatNameFromEmail(user.email),
+      })
       navigate('/dashboard')
-    }, 600)
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'ACCOUNT_UNVERIFIED') {
+        setUnverifiedEmail(cleanEmail)
+        setError('Please verify your email address before logging in.')
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
+      }
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -79,6 +92,17 @@ export default function SignIn() {
         {error && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
             {error}
+            {unverifiedEmail && (
+              <>
+                {' '}
+                <Link
+                  to={`/verify-email?email=${encodeURIComponent(unverifiedEmail)}`}
+                  className="font-semibold underline hover:text-rose-900"
+                >
+                  Verify email
+                </Link>
+              </>
+            )}
           </div>
         )}
 
