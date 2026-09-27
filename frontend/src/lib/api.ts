@@ -270,6 +270,31 @@ export function getProgressSummary(): Promise<ProgressSummary> {
   return authRequest<ProgressSummary>('GET', '/progress/summary')
 }
 
+export type NextActionType =
+  | 'COMPLETE_PROFILE'
+  | 'ADD_EXPERIENCE'
+  | 'COMPLETE_ASSESSMENT'
+  | 'DISCOVER_SKILLS'
+  | 'SELECT_CAREER'
+  | 'REVIEW_SKILL_GAPS'
+  | 'COMPLETE_ROADMAP_TASK'
+  | 'COMPLETE_CHALLENGE'
+  | 'CREATE_EVIDENCE'
+  | 'GENERATE_PASSPORT'
+  | 'JOURNEY_COMPLETE'
+
+export interface NextAction {
+  type: NextActionType
+  action: string
+  reason: string
+  resourceId?: string
+}
+
+/** Returns the backend's deterministic single next best action for the participant. */
+export function getNextAction(): Promise<NextAction> {
+  return authRequest<NextAction>('GET', '/progress/next-action')
+}
+
 export interface CareerRecommendation {
   careerId: string
   careerName: string
