@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Edit3, 
-  Clock, 
-  CheckCircle2, 
-  ShieldCheck, 
-  Sparkles, 
-  ArrowRight, 
+import {
+  Edit3,
+  Clock,
+  CheckCircle2,
+  ShieldCheck,
+  Sparkles,
+  ArrowRight,
   Lock,
   X,
   Crown
@@ -15,6 +15,37 @@ import PurpleBackgroundDots from '../../components/dashboard/PurpleBackgroundDot
 import { useNavigate } from 'react-router-dom';
 
 import { useUserContext } from '../../context/UserContext';
+import {
+  ApiError,
+  generateRoadmap,
+  getCareerRecommendations,
+  getCurrentRoadmap,
+  getProgressSummary,
+  type RoadmapTask,
+} from '../../lib/api';
+
+/** Adapts a real backend roadmap task onto the existing MilestoneStep shape
+ * the page's JSX already renders, so no rendering code needs to change.
+ * 'type' has no backend equivalent, so it keeps the same 'LEARN' fallback
+ * this file already used before any task data existed. */
+function taskToMilestone(task: RoadmapTask, index: number): MilestoneStep {
+  return {
+    id: task.id,
+    number: index + 1,
+    title: task.title,
+    subtitle: task.description,
+    duration: task.estimatedMinutes ? `${task.estimatedMinutes} min` : '—',
+    type: 'LEARN',
+    completed: task.status === 'COMPLETED',
+    active: index === 0,
+  };
+}
+
+function formatPercent(isLoading: boolean, value: number | undefined): string {
+  if (isLoading) return '…'
+  if (value === undefined) return '32'
+  return `${Math.round(value)}`
+}
 
 interface MilestoneStep {
   id: string;
@@ -202,13 +233,90 @@ export const CareerRoadmap: React.FC = () => {
   const navigate = useNavigate();
   const { onboarding } = useUserContext();
   const targetRole = onboarding?.targetRole || 'Data Analyst';
-  const milestones = getMilestonesForRole(targetRole);
+  const fallbackMilestones = getMilestonesForRole(targetRole);
 
   const [activePhase, setActivePhase] = useState<'foundation' | 'development' | 'proof'>('foundation');
   const [showFullRoadmapModal, setShowFullRoadmapModal] = useState(false);
   const [showProModal, setShowProModal] = useState(false);
   const [proModalTitle, setProModalTitle] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const [dayThirtyTasks, setDayThirtyTasks] = useState<RoadmapTask[] | null>(null);
+  const [roadmapProgress, setRoadmapProgress] = useState<number | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [hasNoRoadmap, setHasNoRoadmap] = useState(false);
+  const [isGeneratingRoadmap, setIsGeneratingRoadmap] = useState(false);
+  const [generateError, setGenerateError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRoadmap() {
+      setIsLoading(true);
+      setLoadError('');
+      setHasNoRoadmap(false);
+
+      try {
+        const summary = await getProgressSummary();
+        if (!cancelled) setRoadmapProgress(summary.roadmapProgress);
+      } catch {
+        // Non-fatal: the "X% complete" figure just keeps its static fallback.
+      }
+
+      try {
+        const data = await getCurrentRoadmap();
+        if (cancelled) return;
+        setDayThirtyTasks(data.phases.DAY_30);
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.code === 'RESOURCE_NOT_FOUND') {
+          setHasNoRoadmap(true);
+        } else {
+          setLoadError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    void loadRoadmap();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const realMilestones = dayThirtyTasks && dayThirtyTasks.length > 0 ? dayThirtyTasks.map(taskToMilestone) : null;
+  const milestones = realMilestones ?? fallbackMilestones;
+  const completedCount = dayThirtyTasks?.filter((t) => t.status === 'COMPLETED').length;
+  const totalCount = dayThirtyTasks?.length;
+
+  const handleGenerateRoadmap = async () => {
+    if (isGeneratingRoadmap) return;
+    setGenerateError('');
+    setIsGeneratingRoadmap(true);
+    try {
+      const { recommendations } = await getCareerRecommendations(1);
+      const topCareer = recommendations[0];
+      if (!topCareer) {
+        setGenerateError('Complete your Career Insights first so we know which career to build a roadmap for.');
+        return;
+      }
+      const generated = await generateRoadmap({ careerPathId: topCareer.careerId });
+      setDayThirtyTasks(generated.phases.DAY_30);
+      setHasNoRoadmap(false);
+      try {
+        const summary = await getProgressSummary();
+        setRoadmapProgress(summary.roadmapProgress);
+      } catch {
+        // Non-fatal, same as the initial load.
+      }
+    } catch (err) {
+      setGenerateError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setIsGeneratingRoadmap(false);
+    }
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -294,6 +402,45 @@ export const CareerRoadmap: React.FC = () => {
           </button>
         </motion.div>
 
+        {loadError && (
+          <motion.div variants={itemVariants} className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+            {loadError}
+          </motion.div>
+        )}
+
+        {hasNoRoadmap ? (
+          <motion.div variants={itemVariants}>
+            <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-purple-100/80 shadow-xs text-center space-y-4">
+              <div className="w-12 h-12 mx-auto bg-purple-50 rounded-2xl flex items-center justify-center text-[#8C3F96]">
+                <Sparkles size={22} />
+              </div>
+              <div>
+                <h2 className="text-lg font-extrabold text-[#2D1B4E]">You don't have a roadmap yet</h2>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-md mx-auto">
+                  Generate your personalized 30/60/90-day roadmap based on your top career match.
+                </p>
+              </div>
+
+              {generateError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 max-w-md mx-auto">
+                  {generateError}
+                </div>
+              )}
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleGenerateRoadmap}
+                disabled={isGeneratingRoadmap}
+                className="bg-[#2D1B4E] hover:bg-[#431F69] text-white font-bold text-xs px-6 py-3 rounded-2xl shadow-lg transition-all inline-flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                <span>{isGeneratingRoadmap ? 'Generating your roadmap...' : 'Generate My Roadmap'}</span>
+                {!isGeneratingRoadmap && <ArrowRight size={15} />}
+              </motion.button>
+            </div>
+          </motion.div>
+        ) : (
+        <>
         {/* 2. Top "YOUR JOURNEY" Stepper Card matching Screenshot 2 */}
         <motion.div variants={itemVariants}>
           <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 border border-purple-100/80 shadow-xs space-y-6">
@@ -304,16 +451,16 @@ export const CareerRoadmap: React.FC = () => {
                   YOUR JOURNEY
                 </span>
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl font-black text-[#2D1B4E]">32% complete</span>
+                  <span className="text-2xl font-black text-[#2D1B4E]">{formatPercent(isLoading, roadmapProgress)}% complete</span>
                   <span className="text-xs text-gray-400 font-medium">· 18 days left</span>
                 </div>
               </div>
 
               {/* Mini progress track indicator */}
               <div className="w-full sm:w-64 bg-purple-50 rounded-full h-2.5 overflow-hidden border border-purple-100/60">
-                <motion.div 
+                <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: '32%' }}
+                  animate={{ width: `${roadmapProgress ?? 32}%` }}
                   transition={{ duration: 1, ease: "easeOut" }}
                   className="bg-gradient-to-r from-[#9E4733] to-[#F05A7E] h-full rounded-full"
                 />
@@ -401,7 +548,7 @@ export const CareerRoadmap: React.FC = () => {
                   </div>
                   <span className="text-xs font-semibold text-gray-400 flex items-center gap-1">
                     <Clock size={13} />
-                    15 min
+                    {milestones[0]?.duration || '15 min'}
                   </span>
                 </div>
 
@@ -531,7 +678,9 @@ export const CareerRoadmap: React.FC = () => {
                 
                 <div>
                   <h4 className="text-sm font-extrabold text-[#2D1B4E]">
-                    2 of 4 steps complete
+                    {completedCount !== undefined && totalCount !== undefined
+                      ? `${completedCount} of ${totalCount} steps complete`
+                      : '2 of 4 steps complete'}
                   </h4>
                   <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
                     On pace to complete Foundation. Please stay on schedule.
@@ -540,7 +689,10 @@ export const CareerRoadmap: React.FC = () => {
 
                 {/* Progress bar */}
                 <div className="w-full bg-purple-50 rounded-full h-2 overflow-hidden">
-                  <div className="bg-[#8C3F96] h-full rounded-full w-1/2" />
+                  <div
+                    className={`bg-[#8C3F96] h-full rounded-full ${totalCount ? '' : 'w-1/2'}`}
+                    style={totalCount ? { width: `${((completedCount ?? 0) / totalCount) * 100}%` } : undefined}
+                  />
                 </div>
               </div>
             </motion.div>
@@ -587,6 +739,8 @@ export const CareerRoadmap: React.FC = () => {
           </div>
 
         </div>
+        </>
+        )}
 
         {/* 4. Footer Lock Line matching Screenshot 2 */}
         <motion.div variants={itemVariants} className="pt-8 border-t border-purple-100/60 text-center space-y-1">

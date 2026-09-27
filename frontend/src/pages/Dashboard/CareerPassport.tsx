@@ -1,26 +1,27 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Share2, 
-  Download, 
-  Edit3, 
-  CheckCircle2, 
-  Sparkles, 
-  Award, 
-  ArrowLeft, 
-  ChevronRight, 
-  ShieldCheck, 
-  Copy, 
-  Check, 
-  X, 
-  Lightbulb, 
-  Star, 
+import {
+  Share2,
+  Download,
+  Edit3,
+  CheckCircle2,
+  Sparkles,
+  Award,
+  ArrowLeft,
+  ChevronRight,
+  ShieldCheck,
+  Copy,
+  Check,
+  X,
+  Lightbulb,
+  Star,
   ExternalLink,
   Plus
 } from 'lucide-react';
 import PurpleBackgroundDots from '../../components/dashboard/PurpleBackgroundDots';
 import { useUserContext } from '../../context/UserContext';
+import { ApiError, generatePassport, getPassport, type Passport } from '../../lib/api';
 
 export const CareerPassport: React.FC = () => {
   const navigate = useNavigate();
@@ -32,7 +33,43 @@ export const CareerPassport: React.FC = () => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Editable Profile fields
+  const [passport, setPassport] = useState<Passport | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [hasNoPassport, setHasNoPassport] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState('');
+  const [isSharing, setIsSharing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPassport() {
+      setIsLoading(true);
+      setLoadError('');
+      setHasNoPassport(false);
+      try {
+        const { passport: data } = await getPassport();
+        if (!cancelled) setPassport(data);
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.code === 'RESOURCE_NOT_FOUND') {
+          setHasNoPassport(true);
+        } else {
+          setLoadError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    void loadPassport();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Editable Profile fields (local only - the backend has no bio/summary field)
   const [editName, setEditName] = useState(user.fullName);
   const [editTargetRole, setEditTargetRole] = useState(onboarding.targetRole || 'Fintech Operations Associate');
   const [editSummary, setEditSummary] = useState(
@@ -48,11 +85,46 @@ export const CareerPassport: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const handleCopyShareLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setCopiedLink(true);
-    showToast('📋 Passport verification link copied to clipboard!');
-    setTimeout(() => setCopiedLink(false), 3000);
+  const handleGeneratePassport = async () => {
+    if (isGenerating) return;
+    setGenerateError('');
+    setIsGenerating(true);
+    try {
+      const { passport: generated } = await generatePassport();
+      setPassport(generated);
+      setHasNoPassport(false);
+    } catch (err) {
+      setGenerateError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const publicPassportUrl = passport ? `${window.location.origin}/passport/public/${passport.slug}` : '';
+
+  const handleCopyShareLink = async () => {
+    if (!passport) {
+      showToast('Generate your Career Passport first.');
+      return;
+    }
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      let current = passport;
+      if (!current.isPublic) {
+        const { passport: updated } = await generatePassport({ isPublic: true });
+        setPassport(updated);
+        current = updated;
+      }
+      await navigator.clipboard.writeText(`${window.location.origin}/passport/public/${current.slug}`);
+      setCopiedLink(true);
+      showToast('📋 Passport verification link copied to clipboard!');
+      setTimeout(() => setCopiedLink(false), 3000);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   const handleDownloadPDF = () => {
@@ -69,6 +141,14 @@ export const CareerPassport: React.FC = () => {
     setShowEditProfileModal(false);
     showToast('✨ Career Passport profile updated successfully!');
   };
+
+  // Field-validated = self-reported/verified from real experience; HerNext-developed = AI-derived/earned via challenges.
+  const fieldValidatedSkills = passport
+    ? passport.skills.filter((s) => s.source === 'SELF_REPORTED' || s.source === 'VERIFIED')
+    : null;
+  const herNextSkills = passport
+    ? passport.skills.filter((s) => s.source === 'AI_DERIVED' || s.source === 'CHALLENGE')
+    : null;
 
   return (
     <div className="relative min-h-screen bg-[#FAF8FC] font-sans text-gray-800 pb-20">
@@ -152,6 +232,47 @@ export const CareerPassport: React.FC = () => {
           </div>
         </div>
 
+        {isLoading && (
+          <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3 text-xs text-[#8C3F96]">
+            Loading your Career Passport...
+          </div>
+        )}
+
+        {loadError && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+            {loadError}
+          </div>
+        )}
+
+        {hasNoPassport ? (
+          <div className="bg-white rounded-3xl p-6 sm:p-10 border border-purple-100/80 shadow-xs text-center space-y-4">
+            <div className="w-12 h-12 mx-auto bg-purple-50 rounded-2xl flex items-center justify-center text-[#8C3F96]">
+              <ShieldCheck size={22} />
+            </div>
+            <div>
+              <h2 className="text-lg font-extrabold text-[#2D1B4E]">You don't have a Career Passport yet</h2>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-md mx-auto">
+                Generate your verified profile, skills, experience, and evidence into one shareable credential.
+              </p>
+            </div>
+
+            {generateError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 max-w-md mx-auto">
+                {generateError}
+              </div>
+            )}
+
+            <button
+              onClick={handleGeneratePassport}
+              disabled={isGenerating}
+              className="px-6 py-3 rounded-xl bg-[#2D1B4E] hover:bg-[#431F69] text-white text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-60"
+            >
+              <Sparkles size={14} />
+              <span>{isGenerating ? 'Generating your Career Passport...' : 'Generate My Career Passport'}</span>
+            </button>
+          </div>
+        ) : (
+        <>
         {/* 2. User Profile Card matching Figma Screenshot 1 */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100/80 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
@@ -189,7 +310,7 @@ export const CareerPassport: React.FC = () => {
               </div>
 
               <div className="inline-block bg-purple-50/70 border border-purple-100/80 text-[11px] font-bold text-[#8C3F96] px-3 py-1 rounded-xl">
-                Target: {editTargetRole}
+                Target: {passport?.careerGoal ?? editTargetRole}
               </div>
 
               <p className="text-xs sm:text-sm text-gray-600 leading-relaxed font-medium pt-1 max-w-3xl">
@@ -211,7 +332,7 @@ export const CareerPassport: React.FC = () => {
                   <p className="text-[11px] text-gray-400 font-medium">Algorithmic capability and evidence audit</p>
                 </div>
                 <span className="bg-rose-50 text-[#9E4733] text-[10px] font-extrabold px-3 py-1 rounded-full border border-rose-100">
-                  Career Ready
+                  {passport?.readiness.label ?? 'Career Ready'}
                 </span>
               </div>
 
@@ -228,7 +349,7 @@ export const CareerPassport: React.FC = () => {
                     />
                     <path
                       className="text-[#9E4733]"
-                      strokeDasharray="78, 100"
+                      strokeDasharray={`${passport?.readiness.score ?? 78}, 100`}
                       strokeWidth="4"
                       strokeLinecap="round"
                       stroke="currentColor"
@@ -237,7 +358,7 @@ export const CareerPassport: React.FC = () => {
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-lg font-black text-[#2D1B4E] leading-none">78%</span>
+                    <span className="text-lg font-black text-[#2D1B4E] leading-none">{passport?.readiness.score ?? 78}%</span>
                     <span className="text-[8px] font-extrabold text-gray-400 uppercase tracking-tighter mt-0.5">OVERALL</span>
                   </div>
                 </div>
@@ -253,10 +374,10 @@ export const CareerPassport: React.FC = () => {
               {/* Progress Bars */}
               <div className="space-y-3 pt-1">
                 {[
-                  { title: 'Experience Foundation', pct: 90 },
-                  { title: 'Skills Alignment', pct: 72 },
-                  { title: 'AI Operational Readiness', pct: 70 },
-                  { title: 'Demonstrated Evidence', pct: 60 }
+                  { title: 'Experience Foundation', pct: passport?.readiness.breakdown.experience ?? 90 },
+                  { title: 'Skills Alignment', pct: passport?.readiness.breakdown.skills ?? 72 },
+                  { title: 'AI Operational Readiness', pct: passport?.readiness.breakdown.aiReadiness ?? 70 },
+                  { title: 'Demonstrated Evidence', pct: passport?.readiness.breakdown.evidence ?? 60 }
                 ].map((item, idx) => (
                   <div key={idx} className="space-y-1 text-xs">
                     <div className="flex items-center justify-between font-bold text-[#2D1B4E]">
@@ -293,7 +414,7 @@ export const CareerPassport: React.FC = () => {
                 <p className="text-[11px] text-gray-400 font-medium">Skills developed through direct field tenure and validated via HerNext experiential modules.</p>
               </div>
               <span className="text-[10px] font-extrabold text-[#8C3F96] bg-purple-50 px-3 py-1 rounded-full border border-purple-100">
-                10 Competencies Mapped
+                {passport ? passport.skills.length : 10} Competencies Mapped
               </span>
             </div>
 
@@ -301,26 +422,29 @@ export const CareerPassport: React.FC = () => {
             <div className="space-y-2.5 pt-1">
               <div className="flex items-center justify-between text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
                 <span>TRANSFERABLE SKILLS (FIELD-VALIDATED)</span>
-                <span className="text-[#8C3F96]">6 Mastered</span>
+                <span className="text-[#8C3F96]">{fieldValidatedSkills ? fieldValidatedSkills.length : 6} Mastered</span>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {[
-                  'Financial Operations',
-                  'Customer Service',
-                  'Transaction Processing',
-                  'Record Keeping',
-                  'Cash Management',
-                  'Problem Solving'
-                ].map((sk, idx) => (
-                  <span 
-                    key={idx} 
+                {(fieldValidatedSkills ?? [
+                  { name: 'Financial Operations' },
+                  { name: 'Customer Service' },
+                  { name: 'Transaction Processing' },
+                  { name: 'Record Keeping' },
+                  { name: 'Cash Management' },
+                  { name: 'Problem Solving' }
+                ]).map((sk, idx) => (
+                  <span
+                    key={idx}
                     className="bg-purple-50/60 text-[#2D1B4E] text-xs font-semibold px-3 py-1.5 rounded-xl border border-purple-100 flex items-center gap-1.5"
                   >
                     <CheckCircle2 size={13} className="text-[#8C3F96]" />
-                    {sk}
+                    {sk.name}
                   </span>
                 ))}
+                {fieldValidatedSkills?.length === 0 && (
+                  <span className="text-[11px] text-gray-400 font-medium">No field-validated skills yet.</span>
+                )}
               </div>
             </div>
 
@@ -328,24 +452,27 @@ export const CareerPassport: React.FC = () => {
             <div className="space-y-2.5 pt-2 border-t border-gray-100">
               <div className="flex items-center justify-between text-[10px] font-extrabold text-[#9E4733] uppercase tracking-wider">
                 <span>HERNEXT DEVELOPED & MODERNIZED SKILLS</span>
-                <span className="text-[#9E4733]">4 High-Impact</span>
+                <span className="text-[#9E4733]">{herNextSkills ? herNextSkills.length : 4} High-Impact</span>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {[
-                  'AI Product Thinking',
-                  'Data Analysis',
-                  'UX Analysis',
-                  'Financial Reconciliation'
-                ].map((sk, idx) => (
-                  <span 
-                    key={idx} 
+                {(herNextSkills ?? [
+                  { name: 'AI Product Thinking' },
+                  { name: 'Data Analysis' },
+                  { name: 'UX Analysis' },
+                  { name: 'Financial Reconciliation' }
+                ]).map((sk, idx) => (
+                  <span
+                    key={idx}
                     className="bg-rose-50/70 text-[#9E4733] text-xs font-bold px-3.5 py-1.5 rounded-xl border border-rose-200/80 flex items-center gap-1.5"
                   >
                     <Sparkles size={13} className="text-[#F05A7E]" />
-                    {sk}
+                    {sk.name}
                   </span>
                 ))}
+                {herNextSkills?.length === 0 && (
+                  <span className="text-[11px] text-gray-400 font-medium">No HerNext-developed skills yet.</span>
+                )}
               </div>
             </div>
 
@@ -372,35 +499,46 @@ export const CareerPassport: React.FC = () => {
               <p className="text-[11px] text-gray-400 font-medium">Validated commercial experience</p>
             </div>
 
-            {/* Experience Item */}
-            <div className="p-5 rounded-2xl bg-purple-50/30 border border-purple-100/70 space-y-3 relative group">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h4 className="text-sm font-black text-[#2D1B4E]">POS Business Operator</h4>
-                  <span className="text-[11px] text-gray-500 font-medium block">Independent Financial Terminal Operations · 4 years tenure</span>
-                </div>
-                <span className="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                  Verified
-                </span>
-              </div>
-
-              <p className="text-xs text-gray-600 leading-relaxed font-medium">
-                Administered retail agency banking operations handling heavy daily transaction volume, merchant dispute escalations, and strict ledger auditing.
-              </p>
-
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {['Customer transactions', 'Cash management', 'Financial records', 'Customer support'].map((tag, idx) => (
-                  <span key={idx} className="bg-white text-gray-600 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-purple-100">
-                    {tag}
+            {/* Experience Item(s) */}
+            {passport ? (
+              passport.experience.map((exp, idx) => (
+                <div key={idx} className="p-5 rounded-2xl bg-purple-50/30 border border-purple-100/70 space-y-1">
+                  <h4 className="text-sm font-black text-[#2D1B4E]">{exp.title}</h4>
+                  <span className="text-[11px] text-gray-500 font-medium block">
+                    {[exp.organization, exp.years ? `${exp.years} years tenure` : null].filter(Boolean).join(' · ') || exp.employmentType}
                   </span>
-                ))}
-              </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-5 rounded-2xl bg-purple-50/30 border border-purple-100/70 space-y-3 relative group">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-black text-[#2D1B4E]">POS Business Operator</h4>
+                    <span className="text-[11px] text-gray-500 font-medium block">Independent Financial Terminal Operations · 4 years tenure</span>
+                  </div>
+                  <span className="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                    Verified
+                  </span>
+                </div>
 
-              <div className="pt-2 border-t border-purple-100/60 flex items-center justify-between text-[11px] font-bold text-[#8C3F96]">
-                <span>10,000+ Transactions</span>
-                <span className="hover:underline cursor-pointer">View audit breakdown →</span>
+                <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                  Administered retail agency banking operations handling heavy daily transaction volume, merchant dispute escalations, and strict ledger auditing.
+                </p>
+
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {['Customer transactions', 'Cash management', 'Financial records', 'Customer support'].map((tag, idx) => (
+                    <span key={idx} className="bg-white text-gray-600 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-purple-100">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="pt-2 border-t border-purple-100/60 flex items-center justify-between text-[11px] font-bold text-[#8C3F96]">
+                  <span>10,000+ Transactions</span>
+                  <span className="hover:underline cursor-pointer">View audit breakdown →</span>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Add Supplementary Experience Button */}
             <button 
@@ -420,43 +558,71 @@ export const CareerPassport: React.FC = () => {
             </div>
 
             <div className="space-y-4">
-              {/* Evidence Item 1 */}
-              <div className="p-5 rounded-2xl bg-[#FAF4F7] border border-[#F5E1EC] space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-black text-[#2D1B4E]">AI UX Evaluation</h4>
-                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle2 size={11} /> Completed
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 leading-relaxed font-medium">
-                  Evaluated consumer payment failure paths across 3 digital wallets and articulated UX optimization protocols.
-                </p>
-                <div className="flex flex-wrap gap-1.5 text-[10px] font-bold text-[#8C3F96]">
-                  <span>Skills demonstrated:</span>
-                  <span className="bg-white px-2 py-0.5 rounded border border-purple-100">AI Product Thinking</span>
-                  <span className="bg-white px-2 py-0.5 rounded border border-purple-100">Problem Identification</span>
-                  <span className="bg-white px-2 py-0.5 rounded border border-purple-100">UX Analysis</span>
-                </div>
-              </div>
+              {passport ? (
+                passport.evidence.length > 0 ? (
+                  passport.evidence.map((item) => (
+                    <div key={item.id} className="p-5 rounded-2xl bg-[#FAF4F7] border border-[#F5E1EC] space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-black text-[#2D1B4E]">{item.title}</h4>
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle2 size={11} /> {item.status === 'VERIFIED' ? 'Verified' : 'Pending'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                        {item.description}
+                      </p>
+                      {item.skillName && (
+                        <div className="flex flex-wrap gap-1.5 text-[10px] font-bold text-[#8C3F96]">
+                          <span>Skill demonstrated:</span>
+                          <span className="bg-white px-2 py-0.5 rounded border border-purple-100">{item.skillName}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-400 font-medium">No evidence submitted yet.</p>
+                )
+              ) : (
+                <>
+                  {/* Evidence Item 1 */}
+                  <div className="p-5 rounded-2xl bg-[#FAF4F7] border border-[#F5E1EC] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-black text-[#2D1B4E]">AI UX Evaluation</h4>
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 size={11} /> Completed
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                      Evaluated consumer payment failure paths across 3 digital wallets and articulated UX optimization protocols.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 text-[10px] font-bold text-[#8C3F96]">
+                      <span>Skills demonstrated:</span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-purple-100">AI Product Thinking</span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-purple-100">Problem Identification</span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-purple-100">UX Analysis</span>
+                    </div>
+                  </div>
 
-              {/* Evidence Item 2 */}
-              <div className="p-5 rounded-2xl bg-purple-50/30 border border-purple-100/70 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-black text-[#2D1B4E]">Financial Reconciliation Challenge</h4>
-                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle2 size={11} /> Passed
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 leading-relaxed font-medium">
-                  Identified $12,400 in discrepant batch transfers under timed conditions with 99.4% precision.
-                </p>
-                <div className="flex flex-wrap gap-1.5 text-[10px] font-bold text-[#8C3F96]">
-                  <span>Skills demonstrated:</span>
-                  <span className="bg-white px-2 py-0.5 rounded border border-purple-100">Financial Analysis</span>
-                  <span className="bg-white px-2 py-0.5 rounded border border-purple-100">Reconciliation</span>
-                  <span className="bg-white px-2 py-0.5 rounded border border-purple-100">Problem Solving</span>
-                </div>
-              </div>
+                  {/* Evidence Item 2 */}
+                  <div className="p-5 rounded-2xl bg-purple-50/30 border border-purple-100/70 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-black text-[#2D1B4E]">Financial Reconciliation Challenge</h4>
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 size={11} /> Passed
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                      Identified $12,400 in discrepant batch transfers under timed conditions with 99.4% precision.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 text-[10px] font-bold text-[#8C3F96]">
+                      <span>Skills demonstrated:</span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-purple-100">Financial Analysis</span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-purple-100">Reconciliation</span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-purple-100">Problem Solving</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Credential Badges Acquired section matching Figma Screenshot 2 */}
@@ -465,39 +631,56 @@ export const CareerPassport: React.FC = () => {
                 CREDENTIAL BADGES ACQUIRED
               </span>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100 text-center space-y-1">
-                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#8C3F96] flex items-center justify-center mx-auto">
-                    <Star size={16} />
+              {passport ? (
+                passport.achievements.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {passport.achievements.map((ach) => (
+                      <div key={ach.name} className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100 text-center space-y-1">
+                        <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#8C3F96] flex items-center justify-center mx-auto">
+                          <Award size={16} />
+                        </div>
+                        <span className="font-bold text-xs text-[#2D1B4E] block">{ach.name}</span>
+                      </div>
+                    ))}
                   </div>
-                  <span className="font-bold text-xs text-[#2D1B4E] block">Career Explorer</span>
-                  <span className="text-[9px] text-gray-400 block font-medium">Milestone 1</span>
-                </div>
+                ) : (
+                  <p className="text-xs text-gray-400 font-medium">No achievements earned yet.</p>
+                )
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100 text-center space-y-1">
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#8C3F96] flex items-center justify-center mx-auto">
+                      <Star size={16} />
+                    </div>
+                    <span className="font-bold text-xs text-[#2D1B4E] block">Career Explorer</span>
+                    <span className="text-[9px] text-gray-400 block font-medium">Milestone 1</span>
+                  </div>
 
-                <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100 text-center space-y-1">
-                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#8C3F96] flex items-center justify-center mx-auto">
-                    <Sparkles size={16} />
+                  <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100 text-center space-y-1">
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#8C3F96] flex items-center justify-center mx-auto">
+                      <Sparkles size={16} />
+                    </div>
+                    <span className="font-bold text-xs text-[#2D1B4E] block">Skill Discoverer</span>
+                    <span className="text-[9px] text-gray-400 block font-medium">Milestone 2</span>
                   </div>
-                  <span className="font-bold text-xs text-[#2D1B4E] block">Skill Discoverer</span>
-                  <span className="text-[9px] text-gray-400 block font-medium">Milestone 2</span>
-                </div>
 
-                <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100 text-center space-y-1">
-                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#8C3F96] flex items-center justify-center mx-auto">
-                    <ShieldCheck size={16} />
+                  <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100 text-center space-y-1">
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#8C3F96] flex items-center justify-center mx-auto">
+                      <ShieldCheck size={16} />
+                    </div>
+                    <span className="font-bold text-xs text-[#2D1B4E] block">Proof Builder</span>
+                    <span className="text-[9px] text-gray-400 block font-medium">Milestone 3</span>
                   </div>
-                  <span className="font-bold text-xs text-[#2D1B4E] block">Proof Builder</span>
-                  <span className="text-[9px] text-gray-400 block font-medium">Milestone 3</span>
-                </div>
 
-                <div className="p-3 bg-gradient-to-tr from-[#9E4733] to-[#F05A7E] text-white rounded-2xl shadow-md text-center space-y-1">
-                  <div className="w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center mx-auto">
-                    <Award size={16} />
+                  <div className="p-3 bg-gradient-to-tr from-[#9E4733] to-[#F05A7E] text-white rounded-2xl shadow-md text-center space-y-1">
+                    <div className="w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center mx-auto">
+                      <Award size={16} />
+                    </div>
+                    <span className="font-bold text-xs block">Career Ready</span>
+                    <span className="text-[9px] text-pink-100 block font-medium">Current State</span>
                   </div>
-                  <span className="font-bold text-xs block">Career Ready</span>
-                  <span className="text-[9px] text-pink-100 block font-medium">Current State</span>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -554,7 +737,7 @@ export const CareerPassport: React.FC = () => {
             <div className="p-4 bg-purple-50/40 rounded-2xl border border-purple-100/70 space-y-1">
               <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">ROADMAP PROGRESS</span>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-[#2D1B4E]">64%</span>
+                <span className="text-2xl font-black text-[#2D1B4E]">{passport ? Math.round(passport.roadmapProgress) : 64}%</span>
                 <span className="text-xs text-gray-500 font-semibold">towards tier-1 candidate</span>
               </div>
             </div>
@@ -604,6 +787,8 @@ export const CareerPassport: React.FC = () => {
             </button>
           </div>
         </div>
+        </>
+        )}
 
       </div>
 
@@ -636,13 +821,16 @@ export const CareerPassport: React.FC = () => {
               </div>
 
               <div className="bg-purple-50/70 p-3 rounded-2xl border border-purple-100 flex items-center justify-between text-xs text-[#2D1B4E] font-semibold">
-                <span className="truncate max-w-[240px] text-gray-600">{window.location.href}</span>
+                <span className="truncate max-w-[240px] text-gray-600">
+                  {passport ? (passport.isPublic ? publicPassportUrl : 'A public link will be created when you copy it') : 'Generate your Career Passport first'}
+                </span>
                 <button
                   onClick={handleCopyShareLink}
-                  className="bg-[#2D1B4E] text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-[#431F69] transition-colors flex items-center gap-1 shrink-0"
+                  disabled={isSharing}
+                  className="bg-[#2D1B4E] text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-[#431F69] transition-colors flex items-center gap-1 shrink-0 disabled:opacity-60"
                 >
                   {copiedLink ? <Check size={13} /> : <Copy size={13} />}
-                  <span>{copiedLink ? 'Copied' : 'Copy'}</span>
+                  <span>{isSharing ? 'Copying...' : copiedLink ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
 
@@ -702,7 +890,7 @@ export const CareerPassport: React.FC = () => {
                   <CheckCircle2 size={15} className="text-[#9E4733]" /> Includes verified project evidence
                 </div>
                 <div className="flex items-center gap-2 font-bold">
-                  <CheckCircle2 size={15} className="text-[#9E4733]" /> Includes verified benchmark readiness (78%)
+                  <CheckCircle2 size={15} className="text-[#9E4733]" /> Includes verified benchmark readiness ({passport ? Math.round(passport.readiness.score) : 78}%)
                 </div>
               </div>
 

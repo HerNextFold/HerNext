@@ -5,6 +5,7 @@ import SignUp from './pages/SignUp'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import ResetPassword from './pages/auth/ResetPassword'
 import VerifyEmail from './pages/auth/VerifyEmail'
+import PublicPassport from './pages/PublicPassport'
 import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard/Dashboard'
 import CareerInsights from './pages/Dashboard/CareerInsights'
@@ -17,6 +18,8 @@ import CareerPath from './pages/Dashboard/CareerPath'
 import LessonOverview from './pages/Dashboard/LessonOverview'
 import CourseContent from './pages/Dashboard/CourseContent'
 import Profile from './pages/Dashboard/Profile'
+import Challenges from './pages/Dashboard/Challenges'
+import ChallengeDetail from './pages/Dashboard/ChallengeDetail'
 import CareerPassport from './pages/Dashboard/CareerPassport'
 import SettingsPage from './pages/Dashboard/Settings'
 import CreateCareerPathPage from './pages/Dashboard/CreateCareerPath'
@@ -38,7 +41,10 @@ function App() {
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          
+
+          {/* Public Career Passport (unauthenticated, matches backend GET /passport/public/:slug) */}
+          <Route path="/passport/public/:slug" element={<PublicPassport />} />
+
           {/* Routes below require a locally stored access token (see RequireAuth) */}
           <Route element={<RequireAuth />}>
             {/* Onboarding Flow (Post SignUp) */}
@@ -59,6 +65,8 @@ function App() {
               <Route path="roadmap/overview" element={<LessonOverview />} />
               <Route path="roadmap/learn" element={<CourseContent />} />
               <Route path="profile" element={<Profile />} />
+              <Route path="challenges" element={<Challenges />} />
+              <Route path="challenges/:id" element={<ChallengeDetail />} />
               <Route path="passport" element={<CareerPassport />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>

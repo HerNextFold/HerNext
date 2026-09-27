@@ -1,23 +1,116 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { 
-  FileText, 
-  Search, 
-  Settings2, 
-  Image, 
-  Users, 
-  Lightbulb, 
-  Compass, 
-  ArrowRight, 
-  TrendingUp, 
+import {
+  FileText,
+  Search,
+  Settings2,
+  Image,
+  Users,
+  Lightbulb,
+  Compass,
+  ArrowRight,
+  TrendingUp,
   Sparkles
 } from 'lucide-react';
 import { useUserContext } from '../../context/UserContext';
+import {
+  ApiError,
+  getCareerImpact,
+  listExperiences,
+  runCareerImpact,
+  type CareerImpactAnalysis,
+  type ImpactLevel,
+} from '../../lib/api';
+
+/** Loading: ellipsis. Otherwise: rounded percent. */
+function formatPercent(isLoading: boolean, value: number | undefined): string {
+  if (isLoading) return '…'
+  if (value === undefined) return '—'
+  return `${Math.round(value)}%`
+}
+
+function formatImpactLevelLabel(isLoading: boolean, level: ImpactLevel | undefined): string {
+  if (isLoading) return 'Analyzing'
+  switch (level) {
+    case 'LOW':
+      return 'Low'
+    case 'MODERATE':
+      return 'Moderate'
+    case 'HIGH':
+      return 'High'
+    default:
+      return 'Not Yet Assessed'
+  }
+}
+
+// Icon sets reused to render each real backend task/strength as a card,
+// since automationTasks/augmentedTasks/humanStrengths are flat string lists
+// (no per-item icon or description from the backend).
+const AUTOMATE_ICONS = [Settings2, FileText, Image];
+const AUGMENT_ICONS = [Search, Compass, Settings2];
+const HUMAN_STRENGTH_ICONS = [Users, Lightbulb, Compass, FileText, Users, Search];
 
 const CareerAssessment: React.FC = () => {
   const navigate = useNavigate();
   const { user, onboarding } = useUserContext();
+
+  const [analysis, setAnalysis] = useState<CareerImpactAnalysis | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAssessment() {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const { experiences } = await listExperiences();
+        if (cancelled) return;
+
+        const experience = experiences[0];
+        if (!experience) {
+          setLoadError('Add your work experience in Onboarding to unlock your personalized AI Career Assessment.');
+          return;
+        }
+
+        try {
+          const existing = await getCareerImpact(experience.id);
+          if (cancelled) return;
+          setAnalysis(existing);
+        } catch (err) {
+          if (cancelled) return;
+          if (err instanceof ApiError && err.code === 'RESOURCE_NOT_FOUND') {
+            setIsGenerating(true);
+            const generated = await runCareerImpact(experience.id);
+            if (cancelled) return;
+            setAnalysis(generated);
+          } else {
+            throw err;
+          }
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setLoadError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+          setIsGenerating(false);
+        }
+      }
+    }
+
+    void loadAssessment();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const automationTasks = analysis && analysis.automationTasks.length > 0 ? analysis.automationTasks : null;
+  const augmentedTasks = analysis && analysis.augmentedTasks.length > 0 ? analysis.augmentedTasks : null;
+  const humanStrengths = analysis && analysis.humanStrengths.length > 0 ? analysis.humanStrengths : null;
 
   const container: any = {
     hidden: { opacity: 0 },
@@ -61,31 +154,45 @@ const CareerAssessment: React.FC = () => {
         </div>
       </motion.div>
 
+      {loadError && (
+        <motion.div variants={item} className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+          {loadError}
+        </motion.div>
+      )}
+
+      {isGenerating && (
+        <motion.div variants={item} className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-xs text-[#8C3F96]">
+          Generating your personalized AI Career Assessment... this can take a few seconds.
+        </motion.div>
+      )}
+
       {/* AI Evolution Index & Insights */}
       <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-xs border border-purple-100 flex flex-col sm:flex-row items-center gap-6">
            <div className="relative w-32 h-32 flex-shrink-0">
              <svg className="w-full h-full transform -rotate-90">
                <circle cx="64" cy="64" r="54" fill="transparent" stroke="#F4EFF7" strokeWidth="12" />
-               <motion.circle 
+               <motion.circle
                  initial={{ strokeDashoffset: 339.29 }}
-                 animate={{ strokeDashoffset: 339.29 - (339.29 * 42) / 100 }}
+                 animate={{ strokeDashoffset: 339.29 - (339.29 * (analysis?.score ?? 42)) / 100 }}
                  transition={{ duration: 1.5, ease: "easeOut", delay: 0.3 }}
-                 cx="64" cy="64" r="54" fill="transparent" stroke="#8C3F96" strokeWidth="12" strokeDasharray="339.29" 
+                 cx="64" cy="64" r="54" fill="transparent" stroke="#8C3F96" strokeWidth="12" strokeDasharray="339.29"
                  strokeLinecap="round"
                />
              </svg>
              <div className="absolute inset-0 flex items-center justify-center">
-               <span className="text-3xl font-black text-[#2D1B4E]">42%</span>
+               <span className="text-3xl font-black text-[#2D1B4E]">{analysis ? formatPercent(isLoading, analysis.score) : '42%'}</span>
              </div>
            </div>
            <div>
              <div className="inline-block bg-purple-50 text-[#8C3F96] px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2">
-               Moderate Task Impact
+               {analysis ? `${formatImpactLevelLabel(isLoading, analysis.level)} Task Impact` : 'Moderate Task Impact'}
              </div>
              <h3 className="text-lg font-bold text-[#2D1B4E] mb-1.5">AI Evolution Index</h3>
              <p className="text-xs text-gray-500 leading-relaxed">
-               Approximately 42% of routine tasks in your current role as a UI/UX Designer are likely to be automated or heavily augmented by AI in the next 3-5 years. This creates significant space to elevate your strategic value.
+               {analysis
+                 ? analysis.explanation
+                 : 'Approximately 42% of routine tasks in your current role as a UI/UX Designer are likely to be automated or heavily augmented by AI in the next 3-5 years. This creates significant space to elevate your strategic value.'}
              </p>
            </div>
         </div>
@@ -117,27 +224,43 @@ const CareerAssessment: React.FC = () => {
             <p className="text-xs text-gray-500">Tasks shifting rapidly towards AI assistance.</p>
           </div>
           
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-             <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Settings2 size={18} /></div>
-             <div>
-               <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Routine Design Variations</h4>
-               <p className="text-[11px] text-gray-500 leading-relaxed">Generating multiple layout options for standard UI patterns.</p>
-             </div>
-          </div>
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-             <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><FileText size={18} /></div>
-             <div>
-               <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Basic Documentation</h4>
-               <p className="text-[11px] text-gray-500 leading-relaxed">Automated handoff specs and standard component documentation.</p>
-             </div>
-          </div>
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-             <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Image size={18} /></div>
-             <div>
-               <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Simple Asset Production</h4>
-               <p className="text-[11px] text-gray-500 leading-relaxed">Resizing, basic icon generation, and standard image processing.</p>
-             </div>
-          </div>
+          {automationTasks ? (
+            automationTasks.map((task, index) => {
+              const Icon = AUTOMATE_ICONS[index % AUTOMATE_ICONS.length];
+              return (
+                <div key={task} className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
+                   <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Icon size={18} /></div>
+                   <div>
+                     <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">{task}</h4>
+                   </div>
+                </div>
+              );
+            })
+          ) : (
+            <>
+              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
+                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Settings2 size={18} /></div>
+                 <div>
+                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Routine Design Variations</h4>
+                   <p className="text-[11px] text-gray-500 leading-relaxed">Generating multiple layout options for standard UI patterns.</p>
+                 </div>
+              </div>
+              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
+                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><FileText size={18} /></div>
+                 <div>
+                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Basic Documentation</h4>
+                   <p className="text-[11px] text-gray-500 leading-relaxed">Automated handoff specs and standard component documentation.</p>
+                 </div>
+              </div>
+              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
+                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Image size={18} /></div>
+                 <div>
+                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Simple Asset Production</h4>
+                   <p className="text-[11px] text-gray-500 leading-relaxed">Resizing, basic icon generation, and standard image processing.</p>
+                 </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Right Column */}
@@ -147,27 +270,43 @@ const CareerAssessment: React.FC = () => {
             <p className="text-xs text-gray-500">High-leverage areas where AI acts as a multiplier.</p>
           </div>
 
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-             <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Search size={18} /></div>
-             <div>
-               <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">User Research Synthesis</h4>
-               <p className="text-[11px] text-gray-500 leading-relaxed">Rapidly identifying patterns across large qualitative datasets.</p>
-             </div>
-          </div>
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-             <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Compass size={18} /></div>
-             <div>
-               <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Design Exploration</h4>
-               <p className="text-[11px] text-gray-500 leading-relaxed">Exploring divergent concepts faster before converging on solutions.</p>
-             </div>
-          </div>
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-             <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Settings2 size={18} /></div>
-             <div>
-               <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Prototyping Fidelity</h4>
-               <p className="text-[11px] text-gray-500 leading-relaxed">Moving from low to high-fidelity interactions with greater speed.</p>
-             </div>
-          </div>
+          {augmentedTasks ? (
+            augmentedTasks.map((task, index) => {
+              const Icon = AUGMENT_ICONS[index % AUGMENT_ICONS.length];
+              return (
+                <div key={task} className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
+                   <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Icon size={18} /></div>
+                   <div>
+                     <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">{task}</h4>
+                   </div>
+                </div>
+              );
+            })
+          ) : (
+            <>
+              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
+                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Search size={18} /></div>
+                 <div>
+                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">User Research Synthesis</h4>
+                   <p className="text-[11px] text-gray-500 leading-relaxed">Rapidly identifying patterns across large qualitative datasets.</p>
+                 </div>
+              </div>
+              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
+                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Compass size={18} /></div>
+                 <div>
+                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Design Exploration</h4>
+                   <p className="text-[11px] text-gray-500 leading-relaxed">Exploring divergent concepts faster before converging on solutions.</p>
+                 </div>
+              </div>
+              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
+                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Settings2 size={18} /></div>
+                 <div>
+                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Prototyping Fidelity</h4>
+                   <p className="text-[11px] text-gray-500 leading-relaxed">Moving from low to high-fidelity interactions with greater speed.</p>
+                 </div>
+              </div>
+            </>
+          )}
         </div>
       </motion.div>
 
@@ -179,17 +318,21 @@ const CareerAssessment: React.FC = () => {
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-          {[
-            { label: 'Empathy', icon: Users },
-            { label: 'Problem Framing', icon: Lightbulb },
-            { label: 'Design Judgment', icon: Compass },
-            { label: 'Communication', icon: FileText },
-            { label: 'Collaboration', icon: Users },
-            { label: 'Strategic Sense', icon: Search }
-          ].map((cap) => {
+          {(
+            humanStrengths
+              ? humanStrengths.map((label, index) => ({ label, icon: HUMAN_STRENGTH_ICONS[index % HUMAN_STRENGTH_ICONS.length] }))
+              : [
+                  { label: 'Empathy', icon: Users },
+                  { label: 'Problem Framing', icon: Lightbulb },
+                  { label: 'Design Judgment', icon: Compass },
+                  { label: 'Communication', icon: FileText },
+                  { label: 'Collaboration', icon: Users },
+                  { label: 'Strategic Sense', icon: Search }
+                ]
+          ).map((cap) => {
             const Icon = cap.icon;
             return (
-              <motion.div 
+              <motion.div
                 key={cap.label}
                 whileHover={{ y: -4 }}
                 className="bg-white rounded-2xl py-6 px-3 shadow-xs border border-purple-50 flex flex-col items-center justify-center transition-all"

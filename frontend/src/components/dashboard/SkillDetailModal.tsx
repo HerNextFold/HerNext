@@ -20,8 +20,9 @@ export interface SkillItem {
   category: 'core' | 'career-relevant' | 'develop';
   source: string;
   description: string;
-  proficiencyLevel: 'Expert' | 'Advanced' | 'Intermediate' | 'Foundational';
-  proficiencyPercent: number;
+  /** Omitted when the backend hasn't produced a confidence score for this skill yet. */
+  proficiencyLevel?: 'Expert' | 'Advanced' | 'Intermediate' | 'Foundational';
+  proficiencyPercent?: number;
   icon: any;
   color: string;
   evidence: {
@@ -30,7 +31,8 @@ export interface SkillItem {
     extractedDate: string;
     snippet: string;
   }[];
-  marketImpact: {
+  /** Omitted entirely when the backend has no market-impact data for this skill. */
+  marketImpact?: {
     salaryBoost: string;
     targetRoles: string[];
     demandTrend: string;
@@ -118,22 +120,26 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
               <div>
                 <span className="text-[10px] text-purple-200/60 uppercase font-semibold tracking-wider block">Assessed Level</span>
                 <span className="text-sm font-bold text-white flex items-center gap-1.5">
-                  {skill.proficiencyLevel} 
-                  <span className="text-xs font-normal text-purple-300">({skill.proficiencyPercent}%)</span>
+                  {skill.proficiencyLevel ?? 'Not yet scored'}
+                  {skill.proficiencyPercent !== undefined && (
+                    <span className="text-xs font-normal text-purple-300">({skill.proficiencyPercent}%)</span>
+                  )}
                 </span>
               </div>
             </div>
 
-            <div className="w-full sm:w-48">
-              <div className="w-full bg-black/30 rounded-full h-2 overflow-hidden border border-white/10">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${skill.proficiencyPercent}%` }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  className="bg-gradient-to-r from-[#F05A7E] to-[#9B51E0] h-full rounded-full"
-                />
+            {skill.proficiencyPercent !== undefined && (
+              <div className="w-full sm:w-48">
+                <div className="w-full bg-black/30 rounded-full h-2 overflow-hidden border border-white/10">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${skill.proficiencyPercent}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                    className="bg-gradient-to-r from-[#F05A7E] to-[#9B51E0] h-full rounded-full"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -184,6 +190,9 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
               </div>
 
               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Detected Artifact Citations</h4>
+              {skill.evidence.length === 0 && (
+                <p className="text-xs text-gray-400">No artifact citations available for this skill yet.</p>
+              )}
               {skill.evidence.map((ev, i) => (
                 <div key={i} className="bg-gray-50 rounded-2xl p-4 border border-gray-200/70 space-y-2">
                   <div className="flex justify-between items-center text-xs">
@@ -203,6 +212,11 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
 
           {activeTab === 'market' && (
             <div className="space-y-4">
+              {!skill.marketImpact && (
+                <p className="text-xs text-gray-400">Market data isn't available for this skill yet.</p>
+              )}
+              {skill.marketImpact && (
+              <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
                   <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block mb-1">Target Compensation Bump</span>
@@ -229,6 +243,8 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
                   ))}
                 </div>
               </div>
+              </>
+              )}
             </div>
           )}
 
@@ -237,6 +253,9 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
               <p className="text-xs text-gray-500">
                 Sharpen this competency with curated 15-minute HerNext micro-projects:
               </p>
+              {skill.learningModules.length === 0 && (
+                <p className="text-xs text-gray-400">No learning modules suggested for this skill yet.</p>
+              )}
               {skill.learningModules.map((mod, i) => (
                 <div key={i} className="flex items-center justify-between p-3.5 bg-gray-50 hover:bg-purple-50/50 rounded-2xl border border-gray-100 transition-colors">
                   <div>

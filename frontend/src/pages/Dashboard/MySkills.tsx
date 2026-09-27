@@ -1,16 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Sparkles, 
-  Search, 
-  PenTool, 
-  Lightbulb, 
-  ArrowRight, 
-  CheckCircle2, 
+import {
+  Sparkles,
+  ArrowRight,
+  CheckCircle2,
   TrendingUp,
   RotateCw,
   Cpu,
-  Layers,
   Rocket,
   Wrench,
   Briefcase,
@@ -25,223 +21,159 @@ import type { SkillItem } from '../../components/dashboard/SkillDetailModal';
 import RoadmapConfirmationModal from '../../components/dashboard/RoadmapConfirmationModal';
 import DiscoveryInsightModal from '../../components/dashboard/DiscoveryInsightModal';
 import AddCustomSkillModal from '../../components/dashboard/AddCustomSkillModal';
-
-const INITIAL_SKILLS: SkillItem[] = [
-  {
-    id: 'user-research',
-    name: 'User Research',
-    category: 'career-relevant',
-    source: 'Portfolio',
-    description: 'Demonstrated ability to synthesize user needs into actionable insights.',
-    proficiencyLevel: 'Advanced',
-    proficiencyPercent: 80,
-    icon: Search,
-    color: '#8C3F96',
-    evidence: [
-      {
-        sourceTitle: 'Fintech Mobile App Redesign (Figma Case Study)',
-        details: 'Synthesized 18 user interviews and reduced drop-off in onboarding flow by 32%.',
-        extractedDate: 'Validated March 2026',
-        snippet: 'Led continuous usability discovery sessions to structure frictionless transaction UX.'
-      },
-      {
-        sourceTitle: 'Uploaded Resume (2023 - Present)',
-        details: 'Spearheaded user persona clustering and customer journey architecture.',
-        extractedDate: 'Verified',
-        snippet: 'Senior UX Designer: Responsible for qualitative research synthesis and heuristic audits.'
-      }
-    ],
-    marketImpact: {
-      salaryBoost: '+28%',
-      targetRoles: ['AI Product Designer', 'Principal UX Researcher', 'Lead Experience Architect'],
-      demandTrend: '+42% growth in 2026 AI Product roles'
-    },
-    learningModules: [
-      { title: 'Generative AI User Research Synthesis', duration: '20 mins', difficulty: 'Intermediate' },
-      { title: 'Qualitative LLM Prompt Testing', duration: '25 mins', difficulty: 'Advanced' }
-    ]
-  },
-  {
-    id: 'prototyping',
-    name: 'Prototyping',
-    category: 'career-relevant',
-    source: 'GitHub',
-    description: 'Rapid translation of concepts into interactive models.',
-    proficiencyLevel: 'Expert',
-    proficiencyPercent: 95,
-    icon: PenTool,
-    color: '#F05A7E',
-    evidence: [
-      {
-        sourceTitle: 'GitHub Repo: design-system-tokens',
-        details: 'Created interactive React & Tailwind micro-prototypes with dynamic state handlers.',
-        extractedDate: 'Validated March 2026',
-        snippet: 'Authored 45+ modular UI components with high-fidelity animated transitions.'
-      },
-      {
-        sourceTitle: 'Figma Community Interactive UI Kit',
-        details: 'Published high-fidelity component library with variables and logic states.',
-        extractedDate: 'Verified',
-        snippet: 'Crafted complex micro-interactions, nested component variants, and interactive overlays.'
-      }
-    ],
-    marketImpact: {
-      salaryBoost: '+35%',
-      targetRoles: ['AI Design Technologist', 'Staff UI/UX Engineer', 'AI Prototyping Lead'],
-      demandTrend: '+58% demand surge for live AI prototyping'
-    },
-    learningModules: [
-      { title: 'Interactive AI Canvas & Agent UI Prototyping', duration: '30 mins', difficulty: 'Advanced' },
-      { title: 'Framer & Motion for AI Copilots', duration: '25 mins', difficulty: 'Expert' }
-    ]
-  },
-  {
-    id: 'problem-solving',
-    name: 'Problem Solving',
-    category: 'career-relevant',
-    source: 'Resume',
-    description: 'Navigating ambiguity to deliver structured solutions.',
-    proficiencyLevel: 'Intermediate',
-    proficiencyPercent: 70,
-    icon: Lightbulb,
-    color: '#D47B5A',
-    evidence: [
-      {
-        sourceTitle: 'Cross-functional Product Delivery at SaaS Corp',
-        details: 'Resolved technical and business constraint trade-offs for a multi-tenant platform.',
-        extractedDate: 'Validated March 2026',
-        snippet: 'Synthesized complex regulatory constraints into clean, self-serve workflows.'
-      }
-    ],
-    marketImpact: {
-      salaryBoost: '+22%',
-      targetRoles: ['Product Strategy Lead', 'AI Solutions Architect', 'UX Lead'],
-      demandTrend: 'Essential foundational competency'
-    },
-    learningModules: [
-      { title: 'First-Principles AI Product Framing', duration: '20 mins', difficulty: 'Intermediate' },
-      { title: 'Hypothesis-Driven UX Experimentation', duration: '25 mins', difficulty: 'Advanced' }
-    ]
-  },
-  {
-    id: 'design-systems',
-    name: 'Design System Architecture',
-    category: 'career-relevant',
-    source: 'Figma',
-    description: 'Building multi-brand scalable design tokens, accessible components, and documentation.',
-    proficiencyLevel: 'Expert',
-    proficiencyPercent: 92,
-    icon: Layers,
-    color: '#8C3F96',
-    evidence: [
-      {
-        sourceTitle: 'Enterprise Token Architecture',
-        details: 'Managed 200+ multi-theme design tokens across mobile and web.',
-        extractedDate: 'Validated 2026',
-        snippet: 'Standardized design language system adopted across 4 distributed engineering pods.'
-      }
-    ],
-    marketImpact: {
-      salaryBoost: '+30%',
-      targetRoles: ['Design Systems Architect', 'AI Design Technologist'],
-      demandTrend: '+45% industry growth'
-    },
-    learningModules: [
-      { title: 'AI-Generated Design Tokens & Governance', duration: '30 mins', difficulty: 'Advanced' }
-    ]
-  },
-  {
-    id: 'data-analytics',
-    name: 'Data-Driven UX & Metrics',
-    category: 'career-relevant',
-    source: 'Portfolio',
-    description: 'Leveraging telemetry, heatmaps, and funnel analytics to optimize product metrics.',
-    proficiencyLevel: 'Advanced',
-    proficiencyPercent: 82,
-    icon: TrendingUp,
-    color: '#F05A7E',
-    evidence: [
-      {
-        sourceTitle: 'A/B Test Experimentation Matrix',
-        details: 'Analyzed 120k user events to lift conversion rate by 19%.',
-        extractedDate: 'Validated 2026',
-        snippet: 'Monitored funnel telemetry and iterative variant performance.'
-      }
-    ],
-    marketImpact: {
-      salaryBoost: '+26%',
-      targetRoles: ['Growth UX Lead', 'AI Product Manager'],
-      demandTrend: '+39% demand surge'
-    },
-    learningModules: [
-      { title: 'UX Analytics in Non-Deterministic AI Interfaces', duration: '25 mins', difficulty: 'Intermediate' }
-    ]
-  },
-  {
-    id: 'ai-model-constraints',
-    name: 'AI Model Constraints',
-    category: 'develop',
-    source: 'To Strengthen',
-    description: 'Understanding LLM latency, token limits, context windows, and fallback UX.',
-    proficiencyLevel: 'Foundational',
-    proficiencyPercent: 45,
-    icon: Brain,
-    color: '#D47B5A',
-    evidence: [
-      {
-        sourceTitle: 'HerNext AI Skill Assessment',
-        details: 'Identified as key growth opportunity to transition into AI Product Leadership.',
-        extractedDate: 'Identified Today',
-        snippet: 'Bridging this understanding will unlock senior AI Architecture roles.'
-      }
-    ],
-    marketImpact: {
-      salaryBoost: '+38%',
-      targetRoles: ['AI UX Architect', 'AI Product Director'],
-      demandTrend: '+65% highest emerging demand'
-    },
-    learningModules: [
-      { title: 'Latency, Hallucinations & AI Fallback States', duration: '20 mins', difficulty: 'Intermediate' },
-      { title: 'Context Window UX & Token Optimization', duration: '30 mins', difficulty: 'Advanced' }
-    ]
-  },
-  {
-    id: 'strategic-product-vision',
-    name: 'Strategic Product Vision',
-    category: 'develop',
-    source: 'To Strengthen',
-    description: 'Aligning multi-quarter technology strategy with business revenue and executive leadership.',
-    proficiencyLevel: 'Intermediate',
-    proficiencyPercent: 55,
-    icon: Rocket,
-    color: '#9E4733',
-    evidence: [
-      {
-        sourceTitle: 'HerNext AI Trajectory Matching',
-        details: 'Direct path to bridge Aisha from Senior IC to Product Executive.',
-        extractedDate: 'Recommended',
-        snippet: 'Strategic thinking enables cross-organizational influence and roadmap ownership.'
-      }
-    ],
-    marketImpact: {
-      salaryBoost: '+34%',
-      targetRoles: ['Director of AI Product', 'Head of Design'],
-      demandTrend: '+48% leadership demand'
-    },
-    learningModules: [
-      { title: 'Executive Roadmapping for AI Products', duration: '35 mins', difficulty: 'Advanced' },
-      { title: 'Business Case Modeling for Tech Leaders', duration: '30 mins', difficulty: 'Advanced' }
-    ]
-  }
-];
-
 import { useUserContext } from '../../context/UserContext';
+import {
+  ApiError,
+  getCareerRecommendations,
+  getProfile,
+  getSkillGaps,
+  getTransferableSkills,
+  type CareerProfile,
+  type SkillGapsResponse,
+  type TransferableSkill,
+} from '../../lib/api';
 
-// INITIAL_SKILLS kept intact...
+function proficiencyFromConfidence(confidence: number): 'Expert' | 'Advanced' | 'Intermediate' | 'Foundational' {
+  if (confidence >= 0.85) return 'Expert';
+  if (confidence >= 0.65) return 'Advanced';
+  if (confidence >= 0.4) return 'Intermediate';
+  return 'Foundational';
+}
+
+function humanizeSkillSource(source: string): string {
+  switch (source) {
+    case 'SELF_REPORTED':
+      return 'Self Reported';
+    case 'AI_DERIVED':
+      return 'AI Analysis';
+    case 'CHALLENGE':
+      return 'Challenge';
+    case 'VERIFIED':
+      return 'Verified';
+    default:
+      return source;
+  }
+}
+
+/**
+ * Merges the three real skill sources into one list for the "Skills HerNext
+ * Discovered" grid. Skills the user already has (profile + AI-derived) are
+ * 'career-relevant'; skills missing for their top recommended career (from
+ * skill-gaps) are 'develop'. No proficiency/market/learning data is invented
+ * for fields the backend doesn't provide - those stay empty/omitted.
+ */
+function buildRealSkills(
+  profile: CareerProfile | null,
+  transferable: TransferableSkill[],
+  gaps: SkillGapsResponse | null,
+): SkillItem[] {
+  const items = new Map<string, SkillItem>();
+
+  for (const t of transferable) {
+    if (!t.skillName) continue;
+    items.set(t.skillId, {
+      id: t.skillId,
+      name: t.skillName,
+      category: 'career-relevant',
+      source: 'AI Analysis',
+      description: t.reason,
+      proficiencyLevel: proficiencyFromConfidence(t.confidence),
+      proficiencyPercent: Math.round(t.confidence * 100),
+      icon: Sparkles,
+      color: '#8C3F96',
+      evidence: [],
+      learningModules: [],
+    });
+  }
+
+  if (profile) {
+    for (const s of profile.existingSkills) {
+      if (items.has(s.skillId)) continue;
+      items.set(s.skillId, {
+        id: s.skillId,
+        name: s.skillName,
+        category: 'career-relevant',
+        source: humanizeSkillSource(s.source),
+        description: `Recorded on your profile${s.category ? ` (${s.category})` : ''}.`,
+        icon: CheckCircle2,
+        color: '#8C3F96',
+        evidence: [],
+        learningModules: [],
+      });
+    }
+  }
+
+  if (gaps) {
+    for (const g of gaps.skills) {
+      if (g.status !== 'NEEDS_DEVELOPMENT' || items.has(g.skillId)) continue;
+      items.set(g.skillId, {
+        id: g.skillId,
+        name: g.skillName,
+        category: 'develop',
+        source: 'Skill Gap Analysis',
+        description: `Needed for ${gaps.career.name} (priority: ${g.priority}).`,
+        icon: Brain,
+        color: '#D47B5A',
+        evidence: [],
+        learningModules: [],
+      });
+    }
+  }
+
+  return Array.from(items.values());
+}
 
 export const MySkills: React.FC = () => {
   const { user } = useUserContext();
-  const [skillsList, setSkillsList] = useState<SkillItem[]>(INITIAL_SKILLS);
+  const [skillsList, setSkillsList] = useState<SkillItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [skillGaps, setSkillGaps] = useState<SkillGapsResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const [profile, transferable] = await Promise.all([
+          getProfile().catch((err) => {
+            if (err instanceof ApiError && err.code === 'RESOURCE_NOT_FOUND') return null;
+            throw err;
+          }),
+          getTransferableSkills(),
+        ]);
+        if (cancelled) return;
+
+        let gaps: SkillGapsResponse | null = null;
+        try {
+          const { recommendations } = await getCareerRecommendations(1);
+          const topCareerId = recommendations[0]?.careerId;
+          if (topCareerId) {
+            gaps = await getSkillGaps(topCareerId);
+          }
+        } catch {
+          // No career context yet (or the call failed) - Have vs Develop shows its empty state instead.
+        }
+        if (cancelled) return;
+
+        setSkillGaps(gaps);
+        setSkillsList(buildRealSkills(profile, transferable.skills, gaps));
+      } catch (err) {
+        if (cancelled) return;
+        setLoadError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [filterCategory, setFilterCategory] = useState<'all' | 'career-relevant' | 'develop'>('all');
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
   const [roadmapModalSkill, setRoadmapModalSkill] = useState<string | null>(null);
@@ -336,6 +268,18 @@ export const MySkills: React.FC = () => {
             We've analyzed your experience to uncover the powerful, transferable abilities that map to high-value roles.
           </p>
 
+          {isLoading && (
+            <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3 text-xs text-[#8C3F96]">
+              Loading your skills...
+            </div>
+          )}
+
+          {loadError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+              {loadError}
+            </div>
+          )}
+
           {/* 2. HerNext Skills Discovery Summary Card */}
           <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 shadow-xs border border-purple-100/80 mt-6 relative overflow-hidden">
             {/* Subtle card glow */}
@@ -389,14 +333,16 @@ export const MySkills: React.FC = () => {
 
             {/* Button + Filter Controls */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-              <motion.button 
+              <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                disabled={skillsList.length === 0}
                 onClick={() => {
+                  if (skillsList.length === 0) return;
                   setSelectedSkill(skillsList[0]);
                   showToast(`Opened detailed breakdown for ${user.fullName}`);
                 }}
-                className="bg-[#2D1B4E] hover:bg-[#3D1E68] text-white font-bold text-xs px-6 py-3 rounded-xl flex items-center justify-center sm:justify-start gap-2 transition-all shadow-md cursor-pointer"
+                className="bg-[#2D1B4E] hover:bg-[#3D1E68] text-white font-bold text-xs px-6 py-3 rounded-xl flex items-center justify-center sm:justify-start gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Explore My Skills</span>
                 <ArrowRight size={14} />
@@ -454,6 +400,14 @@ export const MySkills: React.FC = () => {
             </span>
           </div>
 
+          {!isLoading && !loadError && filteredSkills.length === 0 && (
+            <div className="bg-white/95 backdrop-blur-md rounded-3xl p-8 border border-purple-100/80 shadow-xs text-center">
+              <p className="text-sm text-gray-500">
+                No skills discovered yet. Complete Onboarding or your Career Assessment to get started.
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
             {filteredSkills.map((skill) => {
               const SkillIcon = skill.icon;
@@ -486,15 +440,15 @@ export const MySkills: React.FC = () => {
                   <div>
                     <div className="flex justify-between items-center text-[10px] font-bold mb-1.5">
                       <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden mr-3">
-                        <motion.div 
+                        <motion.div
                           initial={{ width: 0 }}
-                          animate={{ width: `${skill.proficiencyPercent}%` }}
+                          animate={{ width: `${skill.proficiencyPercent ?? 0}%` }}
                           transition={{ duration: 0.8, ease: "easeOut" }}
                           className="h-full rounded-full bg-[#3B1B54]"
                         />
                       </div>
                       <span className="text-gray-500 font-medium whitespace-nowrap">
-                        {skill.proficiencyLevel}
+                        {skill.proficiencyLevel ?? 'Not yet scored'}
                       </span>
                     </div>
                   </div>
@@ -578,8 +532,20 @@ export const MySkills: React.FC = () => {
 
         {/* 5. Have vs. Develop Section */}
         <motion.div variants={itemVariants} className="space-y-4">
-          <h2 className="text-xl font-bold text-[#2D1B4E]">Have vs. Develop</h2>
+          <div>
+            <h2 className="text-xl font-bold text-[#2D1B4E]">Have vs. Develop</h2>
+            {skillGaps && (
+              <p className="text-xs text-gray-500 mt-1">Based on your fit for {skillGaps.career.name}</p>
+            )}
+          </div>
 
+          {!skillGaps ? (
+            <div className="bg-white/95 backdrop-blur-md rounded-3xl p-8 border border-purple-100/80 shadow-xs text-center">
+              <p className="text-sm text-gray-500">
+                We don't have a personalized skill comparison yet. Get a career recommendation from your Dashboard Overview first.
+              </p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* What You Have Card */}
             <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-purple-100/80 shadow-xs">
@@ -589,20 +555,23 @@ export const MySkills: React.FC = () => {
               </h3>
 
               <div className="space-y-3">
-                {[
-                  { title: 'User Research & Synthesis', detail: 'Validated across 18 user interview cycles and Figma prototypes.' },
-                  { title: 'Rapid Prototyping', detail: 'Expert mastery in interactive components, variables, and logic states.' },
-                  { title: 'Problem Solving', detail: 'Synthesizing ambiguous business requirements into high-conversion workflows.' }
-                ].map((item, idx) => (
-                  <div 
-                    key={idx}
-                    onClick={() => setHaveDevelopDetail({ title: item.title, type: 'have', desc: item.detail })}
+                {skillGaps.skills.filter((s) => s.status === 'HAS_SKILL').length === 0 && (
+                  <p className="text-xs text-gray-400">No matching skills found yet.</p>
+                )}
+                {skillGaps.skills.filter((s) => s.status === 'HAS_SKILL').map((item) => (
+                  <div
+                    key={item.skillId}
+                    onClick={() => setHaveDevelopDetail({
+                      title: item.skillName,
+                      type: 'have',
+                      desc: `Confirmed skill for ${skillGaps.career.name}.`,
+                    })}
                     className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-purple-50/60 transition-colors cursor-pointer group"
                   >
                     <Check size={16} className="text-[#8C3F96] shrink-0 mt-0.5" />
                     <div>
                       <span className="text-xs font-semibold text-gray-800 group-hover:text-[#8C3F96] transition-colors block">
-                        {item.title}
+                        {item.skillName}
                       </span>
                     </div>
                   </div>
@@ -618,20 +587,23 @@ export const MySkills: React.FC = () => {
               </h3>
 
               <div className="space-y-3">
-                {[
-                  { title: 'AI Model Constraints', detail: 'Master non-deterministic UI states, latency mitigation, and token budgets.' },
-                  { title: 'Strategic Product Vision', detail: 'Formulate business roadmaps, executive alignment, and AI product positioning.' },
-                  { title: 'Technical Leadership', detail: 'Leading multi-disciplinary engineering, data science, and UX squads.' }
-                ].map((item, idx) => (
-                  <div 
-                    key={idx}
-                    onClick={() => setHaveDevelopDetail({ title: item.title, type: 'develop', desc: item.detail })}
+                {skillGaps.skills.filter((s) => s.status === 'NEEDS_DEVELOPMENT').length === 0 && (
+                  <p className="text-xs text-gray-400">No skill gaps found - you're covered!</p>
+                )}
+                {skillGaps.skills.filter((s) => s.status === 'NEEDS_DEVELOPMENT').map((item) => (
+                  <div
+                    key={item.skillId}
+                    onClick={() => setHaveDevelopDetail({
+                      title: item.skillName,
+                      type: 'develop',
+                      desc: `Priority: ${item.priority} for ${skillGaps.career.name}.`,
+                    })}
                     className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-white/60 transition-colors cursor-pointer group"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-[#9E4733] shrink-0 mt-1.5" />
                     <div>
                       <span className="text-xs font-semibold text-gray-800 group-hover:text-[#9E4733] transition-colors block">
-                        {item.title}
+                        {item.skillName}
                       </span>
                     </div>
                   </div>
@@ -639,6 +611,7 @@ export const MySkills: React.FC = () => {
               </div>
             </div>
           </div>
+          )}
         </motion.div>
 
         {/* 6. HerNext Insight Card */}

@@ -77,6 +77,7 @@ const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const isRoadmapRoute = location.pathname.includes('/roadmap') && !location.pathname.includes('/roadmap/learn');
   const isLearnRoute = location.pathname.includes('/roadmap/learn');
   const isProfileRoute = location.pathname.includes('/profile');
+  const isChallengesRoute = location.pathname.includes('/challenges');
   const isPassportRoute = location.pathname.includes('/passport');
   const isSettingsRoute = location.pathname.includes('/settings');
   const isDashboardRoute = location.pathname.startsWith('/dashboard/insights') || 
@@ -237,16 +238,18 @@ const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
             {/* Secondary Nav Items */}
             <li>
-              <button
-                onClick={() => {
-                  setActiveModal('Challenges');
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-white/75 hover:bg-white/8 hover:text-white rounded-xl transition-all duration-200 text-xs cursor-pointer"
+              <NavLink
+                to="/dashboard/challenges"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-200 text-xs font-medium cursor-pointer ${
+                  isChallengesRoute
+                    ? 'bg-[#9E4733] text-white shadow-md'
+                    : 'text-white/75 hover:bg-white/8 hover:text-white'
+                }`}
               >
-                <Trophy size={16} className="text-white/60" />
+                <Trophy size={16} className={isChallengesRoute ? 'text-white' : 'text-white/60'} />
                 <span>Challenges</span>
-              </button>
+              </NavLink>
             </li>
             <li>
               <NavLink
@@ -362,6 +365,8 @@ const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
             {isSettingsRoute ? (
               <h2 className="text-lg md:text-xl font-bold text-[#2D1B4E]">Settings</h2>
+            ) : isChallengesRoute ? (
+              <h2 className="text-lg md:text-xl font-bold text-[#2D1B4E]">Challenges</h2>
             ) : isPassportRoute ? (
               <h2 className="text-lg md:text-xl font-bold text-[#2D1B4E]">Career Passport</h2>
             ) : isNewPathRoute ? (
