@@ -1,10 +1,11 @@
 import { useState } from 'react'
 
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Eye, EyeOff, Globe, Lock, Mail, User } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Lock, Mail, User } from 'lucide-react'
 import AuthLayout from '../components/auth/AuthLayout'
 import GoogleButton from '../components/auth/GoogleButton'
 import Button from '../components/Button'
+import { LocationSelects } from '../components/LocationSelects'
 import { useUserContext } from '../context/UserContext'
 import { ApiError, registerUser } from '../lib/api'
 
@@ -21,6 +22,7 @@ export default function SignUp() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [country, setCountry] = useState('')
+  const [state, setState] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeTerms, setAgreeTerms] = useState(true)
@@ -30,10 +32,7 @@ export default function SignUp() {
   const [isLoading, setIsLoading] = useState(false)
 
   const handleGoogleAuth = () => {
-    const finalEmail = email.trim() || 'aisha.halima@hernext.com';
-    const finalName = fullName.trim() || 'Aisha Halima';
-    updateUser({ fullName: finalName, email: finalEmail });
-    navigate('/onboarding');
+    setError('Google sign-up is not configured yet. Please create your account with your email and password.')
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,12 +58,23 @@ export default function SignUp() {
 
     try {
       const { firstName, lastName } = splitFullName(fullName)
-      await registerUser({
+      const { user } = await registerUser({
         firstName,
         lastName,
         email: email.trim(),
         password,
         country: country.trim(),
+        // Only sent when chosen: countries without a listed subdivision have none.
+        ...(state.trim() ? { state: state.trim() } : {}),
+      })
+
+      // Hydrate the session from the values the backend actually stored, never
+      // from the local form, so nothing fabricated reaches the dashboard.
+      updateUser({
+        fullName: `${user.firstName} ${user.lastName}`.trim() || fullName.trim(),
+        email: user.email,
+        country: user.country,
+        state: user.state ?? '',
       })
 
       // Registration succeeded but the account is still UNVERIFIED - the
@@ -157,25 +167,14 @@ export default function SignUp() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-ink/80">
-              Country
-            </label>
-            <div className="relative mt-1.5">
-              <Globe
-                size={18}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-body/50"
-              />
-              <input
-                type="text"
-                required
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                placeholder="Nigeria"
-                className="w-full rounded-xl border border-hairline bg-slate-50/50 py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-plum-600 focus:bg-white focus:ring-2 focus:ring-plum-500/20"
-              />
-            </div>
-          </div>
+          <LocationSelects
+            country={country}
+            onCountryChange={setCountry}
+            state={state}
+            onStateChange={setState}
+            countryRequired
+            idPrefix="signup"
+          />
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-ink/80">

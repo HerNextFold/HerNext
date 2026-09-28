@@ -19,9 +19,7 @@ export default function SignIn() {
   const [isLoading, setIsLoading] = useState(false)
 
   const handleGoogleAuth = () => {
-    const userEmail = email.trim() || 'aisha.halima@gmail.com';
-    updateUser({ email: userEmail, fullName: formatNameFromEmail(userEmail) });
-    navigate('/dashboard');
+    setError('Google sign-in is not configured yet. Please log in with your email and password.')
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,6 +42,8 @@ export default function SignIn() {
       updateUser({
         email: user.email,
         fullName: `${user.firstName} ${user.lastName}`.trim() || formatNameFromEmail(user.email),
+        country: user.country,
+        state: user.state ?? '',
       })
       navigate('/dashboard')
     } catch (err) {

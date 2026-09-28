@@ -1,121 +1,144 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Search, 
-  ArrowRight, 
+import { motion } from 'motion/react';
+import {
+  Search,
+  ArrowRight,
   ArrowLeft,
-  Info, 
-  Check, 
+  Info,
+  Check,
   CheckCircle2,
   Sparkles,
   Plus
 } from 'lucide-react';
 import { useUserContext } from '../../context/UserContext';
+import {
+  ApiError,
+  getProfile,
+  getCareerRecommendations,
+  getSkillGaps,
+  generateRoadmap,
+  type CareerProfile,
+  type CareerRecommendation,
+  type RoadmapWithPhases,
+  type SkillGapItem
+} from '../../lib/api';
 
-const SUGGESTED_ROLES = [
-  { 
-    id: 'data-analyst', 
-    title: 'Data Analyst', 
-    category: 'Technology', 
-    initials: 'DA',
-    foundation: 'Excel · Data Fundamentals',
-    build: 'SQL · Python · Data Visualization'
-  },
-  { 
-    id: 'frontend-dev', 
-    title: 'Frontend Developer', 
-    category: 'Engineering', 
-    initials: 'FD',
-    foundation: 'HTML/CSS · Web Architecture',
-    build: 'JavaScript · React · Tailwind CSS'
-  },
-  { 
-    id: 'graphics-designer', 
-    title: 'Graphics Designer', 
-    category: 'Design & Visual Arts', 
-    initials: 'GD',
-    foundation: 'Design Principles · Visual Composition',
-    build: 'Photoshop · Illustrator · Brand Systems'
-  },
-  { 
-    id: 'product-manager', 
-    title: 'Product Manager', 
-    category: 'Technology & Strategy', 
-    initials: 'PM',
-    foundation: 'Product Thinking · Market Research',
-    build: 'PRD Creation · User Stories · Analytics'
-  },
-  { 
-    id: 'ux-researcher', 
-    title: 'UX Researcher', 
-    category: 'Design & Product', 
-    initials: 'UR',
-    foundation: 'User Interviewing · Usability Testing',
-    build: 'Persona Mapping · Journey Audits · Heuristics'
-  },
-  { 
-    id: 'mobile-dev', 
-    title: 'Mobile App Developer', 
-    category: 'Engineering', 
-    initials: 'MD',
-    foundation: 'Mobile UI Basics · Responsive Layouts',
-    build: 'React Native · Flutter · API Integration'
-  },
-  { 
-    id: 'brand-strategist', 
-    title: 'Brand Strategist', 
-    category: 'Marketing & Strategy', 
-    initials: 'BS',
-    foundation: 'Market Positioning · Consumer Insights',
-    build: 'Brand Identity · Messaging Systems · Campaign Strategy'
-  }
-];
+const PRIORITY_LABELS: Record<string, string> = {
+  HIGH: 'High Priority',
+  MEDIUM: 'Medium Priority',
+  LOW: 'Low Priority'
+};
 
 const CreateCareerPathPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, updateOnboarding } = useUserContext();
+  const { user } = useUserContext();
 
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [searchQuery, setSearchQuery] = useState<string>('Data Analyst');
-  const [selectedRole, setSelectedRole] = useState(SUGGESTED_ROLES[0]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [recommendations, setRecommendations] = useState<CareerRecommendation[]>([]);
+  const [selectedCareer, setSelectedCareer] = useState<CareerRecommendation | null>(null);
+  const [profile, setProfile] = useState<CareerProfile | null>(null);
+  const [skillGaps, setSkillGaps] = useState<SkillGapItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [gapsLoading, setGapsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [generationError, setGenerationError] = useState('');
+  const [generatedRoadmap, setGeneratedRoadmap] = useState<RoadmapWithPhases | null>(null);
 
-  const handleSelectRole = (role: typeof SUGGESTED_ROLES[0]) => {
-    setSelectedRole(role);
-    setSearchQuery(role.title);
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const [profileData, recsData] = await Promise.all([getProfile(), getCareerRecommendations()]);
+        if (cancelled) return;
+        setProfile(profileData);
+        const recs = recsData.recommendations ?? [];
+        setRecommendations(recs);
+        if (recs.length > 0) {
+          setSelectedCareer(recs[0]);
+          setSearchQuery(recs[0].careerName);
+        }
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCareer) return;
+    const career: CareerRecommendation = selectedCareer;
+    let cancelled = false;
+    async function loadGaps() {
+      setGapsLoading(true);
+      try {
+        const data = await getSkillGaps(career.careerId);
+        if (!cancelled) setSkillGaps(data.skills ?? []);
+      } catch {
+        if (!cancelled) setSkillGaps([]);
+      } finally {
+        if (!cancelled) setGapsLoading(false);
+      }
+    }
+    void loadGaps();
+    return () => { cancelled = true; };
+  }, [selectedCareer]);
+
+  const handleSelectCareer = (rec: CareerRecommendation) => {
+    setSelectedCareer(rec);
+    setSearchQuery(rec.careerName);
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     if (currentStep < 3) {
-      setCurrentStep(prev => prev + 1);
+      setCurrentStep((prev) => prev + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (currentStep === 3) {
+      return;
+    }
+    if (currentStep === 3 && selectedCareer) {
+      setGenerationError('');
       setIsSubmitting(true);
-      setTimeout(() => {
-        setIsSubmitting(false);
+      try {
+        const roadmap = await generateRoadmap({ careerPathId: selectedCareer.careerId });
+        setGeneratedRoadmap(roadmap);
         setCurrentStep(4);
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 1000);
+      } catch (err) {
+        setGenerationError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
   const handlePrevStep = () => {
     if (currentStep > 1) {
-      setCurrentStep(prev => prev - 1);
+      setCurrentStep((prev) => prev - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const handleViewRoadmap = () => {
-    // Update user's target role in context so the Roadmap page loads this dynamic path
-    updateOnboarding({ targetRole: selectedRole.title });
     navigate('/dashboard/roadmap');
   };
 
+  const filteredRecs = recommendations.filter((rec) =>
+    rec.careerName.toLowerCase().includes(searchQuery.trim().toLowerCase())
+  );
+  const hasSkills = skillGaps.filter((s) => s.status === 'HAS_SKILL');
+  const developSkills = skillGaps.filter((s) => s.status === 'NEEDS_DEVELOPMENT');
+  const matchingPct = skillGaps.length > 0 ? Math.round((hasSkills.length / skillGaps.length) * 100) : 0;
+
   const userInitials = user.fullName
-    ? user.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'AA';
+    ? user.fullName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    : '?';
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-16 font-sans">
@@ -159,7 +182,7 @@ const CreateCareerPathPage: React.FC = () => {
         {/* User & Active Path Badge Header */}
         <div className="flex items-center gap-3 bg-white p-2.5 px-4 rounded-2xl shadow-xs border border-purple-100/80">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active Path: Product Designer
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Exploring: {selectedCareer?.careerName ?? 'Not set'}
           </span>
           <div className="flex items-center gap-2.5 pl-2 border-l border-gray-200">
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#9E4733] to-[#8C3F96] text-white flex items-center justify-center font-bold text-xs shadow-xs">
@@ -216,10 +239,10 @@ const CreateCareerPathPage: React.FC = () => {
             {currentStep === 4 && "Your new career roadmap is ready"}
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            {currentStep === 1 && "Explore another career direction and build a personalized roadmap for it."}
-            {currentStep === 2 && "HerNext is comparing your new career goal with your existing experience, skills, and interests."}
+            {currentStep === 1 && "Explore another recommended career and build a personalized roadmap for it."}
+            {currentStep === 2 && "HerNext compares the career's required skills against your experience and existing skills."}
             {currentStep === 3 && "See what you already bring to this career and what you need to develop next."}
-            {currentStep === 4 && "HerNext has created a personalized path for your new career goal."}
+            {currentStep === 4 && "HerNext has generated a personalized path for your new career goal."}
           </p>
         </div>
 
@@ -234,15 +257,7 @@ const CreateCareerPathPage: React.FC = () => {
           <Info size={18} />
         </div>
         <p className="text-xs text-[#7A2E1D] leading-relaxed font-medium">
-          {currentStep === 4 ? (
-            <>
-              <strong>Your existing career path is still saved.</strong> Creating this new path did not replace or change your current Product Designer roadmap. Both paths are active in your dashboard.
-            </>
-          ) : (
-            <>
-              <strong>Your current career path is safe.</strong> Your existing Product Designer roadmap will remain fully active and available in your dashboard. This new path is created separately as an additional path.
-            </>
-          )}
+          <strong>Building this roadmap replaces your active roadmap.</strong> Your career profile and skills stay the same — only the generated roadmap switches to this new career.
         </p>
       </div>
 
@@ -254,8 +269,8 @@ const CreateCareerPathPage: React.FC = () => {
           {/* Step 1 */}
           <div className="flex items-center gap-3 relative z-10">
             <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shadow-md transition-all ${
-              currentStep > 1 
-                ? 'bg-emerald-500 text-white' 
+              currentStep > 1
+                ? 'bg-emerald-500 text-white'
                 : 'bg-[#2D1B4E] text-white ring-4 ring-purple-100'
             }`}>
               {currentStep > 1 ? <Check size={16} /> : '1'}
@@ -269,10 +284,10 @@ const CreateCareerPathPage: React.FC = () => {
           {/* Step 2 */}
           <div className="flex items-center gap-3 relative z-10">
             <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shadow-sm transition-all ${
-              currentStep > 2 
-                ? 'bg-emerald-500 text-white' 
-                : currentStep === 2 
-                ? 'bg-[#2D1B4E] text-white ring-4 ring-purple-100' 
+              currentStep > 2
+                ? 'bg-emerald-500 text-white'
+                : currentStep === 2
+                ? 'bg-[#2D1B4E] text-white ring-4 ring-purple-100'
                 : 'bg-white border-2 border-gray-300 text-gray-400'
             }`}>
               {currentStep > 2 ? <Check size={16} /> : '2'}
@@ -288,10 +303,10 @@ const CreateCareerPathPage: React.FC = () => {
           {/* Step 3 */}
           <div className="flex items-center gap-3 relative z-10">
             <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shadow-sm transition-all ${
-              currentStep > 3 
-                ? 'bg-emerald-500 text-white' 
-                : currentStep === 3 
-                ? 'bg-[#2D1B4E] text-white ring-4 ring-purple-100' 
+              currentStep > 3
+                ? 'bg-emerald-500 text-white'
+                : currentStep === 3
+                ? 'bg-[#2D1B4E] text-white ring-4 ring-purple-100'
                 : 'bg-white border-2 border-gray-300 text-gray-400'
             }`}>
               {currentStep > 3 ? <Check size={16} /> : '3'}
@@ -307,8 +322,8 @@ const CreateCareerPathPage: React.FC = () => {
           {/* Step 4 */}
           <div className="flex items-center gap-3 relative z-10">
             <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shadow-sm transition-all ${
-              currentStep === 4 
-                ? 'bg-[#2D1B4E] text-white ring-4 ring-purple-100' 
+              currentStep === 4
+                ? 'bg-[#2D1B4E] text-white ring-4 ring-purple-100'
                 : 'bg-white border-2 border-gray-300 text-gray-400'
             }`}>
               4
@@ -323,9 +338,33 @@ const CreateCareerPathPage: React.FC = () => {
         </div>
       </div>
 
+      {isLoading ? (
+        <div className="bg-white rounded-3xl p-8 text-center border border-purple-100/80 shadow-sm text-xs text-[#8C3F96]">
+          Loading recommended careers...
+        </div>
+      ) : loadError ? (
+        <div className="bg-white rounded-3xl p-8 text-center border border-purple-100/80 shadow-sm text-xs text-rose-700">
+          {loadError}
+        </div>
+      ) : recommendations.length === 0 ? (
+        <div className="bg-white rounded-3xl p-8 text-center border border-purple-100/80 shadow-sm space-y-3">
+          <p className="text-sm font-bold text-[#2D1B4E]">No recommended careers yet</p>
+          <p className="text-xs text-gray-500 max-w-md mx-auto">
+            Complete your profile and run the AI Career Assessment to receive career recommendations.
+          </p>
+          <button
+            onClick={() => navigate('/dashboard/assessment')}
+            className="mt-2 px-6 py-3 rounded-xl bg-[#2D1B4E] hover:bg-[#431F69] text-white text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer shadow-md"
+          >
+            <Sparkles size={14} />
+            <span>Run the AI Assessment</span>
+          </button>
+        </div>
+      ) : (
+      <>
       {/* STEP 1 FORM CARD */}
       {currentStep === 1 && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-purple-100/80 space-y-6"
@@ -333,119 +372,103 @@ const CreateCareerPathPage: React.FC = () => {
           <div>
             <h2 className="text-lg md:text-xl font-bold text-[#2D1B4E]">What career would you like to explore?</h2>
             <p className="text-xs text-gray-500 mt-1">
-              Enter the role you're interested in and we'll help you understand what it takes to get there.
+              Choose from your recommended careers, then we'll map a roadmap for it.
             </p>
           </div>
 
           {/* Input Box */}
           <div>
             <label className="block text-[10px] uppercase font-extrabold tracking-wider text-gray-500 mb-2">
-              SEARCH OR ENTER A CAREER ROLE
+              SEARCH YOUR RECOMMENDED CAREERS
             </label>
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input 
+              <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  const match = SUGGESTED_ROLES.find(r => r.title.toLowerCase().includes(e.target.value.toLowerCase()));
-                  if (match) setSelectedRole(match);
-                  else setSelectedRole({ 
-                    id: 'custom', 
-                    title: e.target.value, 
-                    category: 'General', 
-                    initials: e.target.value.substring(0,2).toUpperCase() || 'CR',
-                    foundation: `${e.target.value} Fundamentals & Core Practices`,
-                    build: 'Tools · Technical Skills · Industry Applications'
-                  });
-                }}
-                placeholder="Search or enter a career role (e.g. Graphics Designer, Frontend Dev...)"
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search a recommended role..."
                 className="w-full pl-11 pr-4 py-3.5 bg-[#FAF8FC] border border-gray-200 rounded-2xl text-xs font-bold text-[#2D1B4E] focus:outline-none focus:border-[#8C3F96] focus:bg-white transition-all shadow-xs"
               />
             </div>
           </div>
 
-          {/* Suggested Roles Tags */}
+          {/* Recommended Careers Grid */}
           <div>
             <p className="text-[11px] font-medium text-gray-500 mb-3">
-              Suggested career paths based on your experience:
+              Recommended careers based on your experience:
             </p>
-            <div className="flex flex-wrap gap-2.5">
-              {SUGGESTED_ROLES.map((role) => {
-                const isSelected = selectedRole.title.toLowerCase() === role.title.toLowerCase();
-                return (
-                  <button
-                    key={role.id}
-                    onClick={() => handleSelectRole(role)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      isSelected 
-                        ? 'bg-[#8C3F96] text-white shadow-md scale-102 ring-2 ring-purple-300' 
-                        : 'bg-purple-50 hover:bg-purple-100 text-[#2D1B4E]'
-                    }`}
-                  >
-                    <span>+</span>
-                    <span>{role.title}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {filteredRecs.length === 0 ? (
+              <p className="text-xs text-gray-400 font-medium">No careers match that search.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {filteredRecs.map((rec) => {
+                  const isSelected = selectedCareer?.careerId === rec.careerId;
+                  return (
+                    <button
+                      key={rec.careerId}
+                      onClick={() => handleSelectCareer(rec)}
+                      className={`text-left p-4 rounded-2xl border transition-all cursor-pointer space-y-1 ${
+                        isSelected
+                          ? 'bg-purple-50 border-[#8C3F96] shadow-md ring-2 ring-purple-300'
+                          : 'bg-white border-purple-100/80 hover:border-purple-200 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-[#2D1B4E]">{rec.careerName}</span>
+                        {isSelected && <Check size={14} className="text-[#8C3F96]" />}
+                      </div>
+                      <span className="bg-[#FAF0E6] text-[#8C3F96] text-[10px] font-bold px-2 py-0.5 rounded-full inline-block">
+                        {Math.round(rec.matchScore)}% Match
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Selected Career Goal Sub-Card */}
-          <AnimatePresence mode="wait">
-            {selectedRole && selectedRole.title && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                className="bg-[#FAF8FC] rounded-2xl p-5 border border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-              >
-                <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#2D1B4E] to-[#8C3F96] text-white font-black text-sm flex items-center justify-center shadow-md shrink-0">
-                    {selectedRole.initials || 'CR'}
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#9E4733] block mb-0.5">
-                      YOUR NEW CAREER GOAL
-                    </span>
-                    <h4 className="text-base font-bold text-[#2D1B4E]">{selectedRole.title}</h4>
-                    <p className="text-xs text-gray-500">{selectedRole.category}</p>
-                  </div>
+          {selectedCareer && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-[#FAF8FC] rounded-2xl p-5 border border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#2D1B4E] to-[#8C3F96] text-white font-black text-sm flex items-center justify-center shadow-md shrink-0">
+                  {selectedCareer.careerName.substring(0, 2).toUpperCase()}
                 </div>
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#9E4733] block mb-0.5">
+                    YOUR NEW CAREER GOAL
+                  </span>
+                  <h4 className="text-base font-bold text-[#2D1B4E]">{selectedCareer.careerName}</h4>
+                  <p className="text-xs text-gray-500">{Math.round(selectedCareer.matchScore)}% match with your profile</p>
+                </div>
+              </div>
 
-                <button 
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSelectedRole({ 
-                      id: 'custom', 
-                      title: '', 
-                      category: '', 
-                      initials: '',
-                      foundation: '',
-                      build: ''
-                    });
-                  }}
-                  className="text-xs font-bold text-[#8C3F96] hover:text-[#73317c] bg-white hover:bg-purple-50 px-4 py-2 rounded-xl border border-purple-100 transition-colors cursor-pointer self-start sm:self-auto"
-                >
-                  Change role
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              <button
+                onClick={() => setSelectedCareer(null)}
+                className="text-xs font-bold text-[#8C3F96] hover:text-[#73317c] bg-white hover:bg-purple-50 px-4 py-2 rounded-xl border border-purple-100 transition-colors cursor-pointer self-start sm:self-auto"
+              >
+                Change role
+              </button>
+            </motion.div>
+          )}
 
           {/* Bottom Form Actions */}
           <div className="flex items-center justify-between pt-6 border-t border-gray-100">
-            <button 
+            <button
               onClick={() => navigate('/dashboard/path')}
               className="px-5 py-3 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
             >
               Cancel
             </button>
 
-            <button 
+            <button
               onClick={handleNextStep}
-              disabled={!selectedRole.title}
+              disabled={!selectedCareer}
               className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#2D1B4E] hover:bg-[#431F69] disabled:opacity-50 text-white text-xs font-bold shadow-md transition-all cursor-pointer"
             >
               <span>Continue</span>
@@ -456,8 +479,8 @@ const CreateCareerPathPage: React.FC = () => {
       )}
 
       {/* STEP 2 FORM CARD: CAREER ANALYSIS */}
-      {currentStep === 2 && (
-        <motion.div 
+      {currentStep === 2 && selectedCareer && (
+        <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-purple-100/80 space-y-7"
@@ -466,18 +489,18 @@ const CreateCareerPathPage: React.FC = () => {
           <div className="bg-[#FAF8FC] rounded-2xl p-5 border border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#2D1B4E] to-[#8C3F96] text-white font-black text-sm flex items-center justify-center shadow-md shrink-0">
-                {selectedRole.initials || 'DA'}
+                {selectedCareer.careerName.substring(0, 2).toUpperCase()}
               </div>
               <div>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#9E4733] block mb-0.5">
                   YOUR NEW CAREER GOAL
                 </span>
-                <h4 className="text-base font-bold text-[#2D1B4E]">{selectedRole.title || 'Data Analyst'}</h4>
-                <p className="text-xs text-gray-500">{selectedRole.category || 'Technology'}</p>
+                <h4 className="text-base font-bold text-[#2D1B4E]">{selectedCareer.careerName}</h4>
+                <p className="text-xs text-gray-500">{Math.round(selectedCareer.matchScore)}% match with your profile</p>
               </div>
             </div>
 
-            <button 
+            <button
               onClick={() => setCurrentStep(1)}
               className="text-xs font-bold text-[#8C3F96] hover:text-[#73317c] bg-white hover:bg-purple-50 px-4 py-2 rounded-xl border border-purple-100 transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1"
             >
@@ -504,7 +527,9 @@ const CreateCareerPathPage: React.FC = () => {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-[#2D1B4E]">Your experience</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Your previous work responsibilities</p>
+                    <p className="text-[11px] text-gray-500 font-medium">
+                      {profile?.currentOccupation || 'Not set'} {profile ? `· ${profile.yearsOfExperience} yrs` : ''}
+                    </p>
                   </div>
                 </div>
                 <span className="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold px-3 py-1 rounded-full border border-emerald-200">
@@ -520,7 +545,9 @@ const CreateCareerPathPage: React.FC = () => {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-[#2D1B4E]">Your existing skills</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Skills you've already developed</p>
+                    <p className="text-[11px] text-gray-500 font-medium">
+                      {profile?.existingSkills.length ?? 0} skills currently mapped on your profile
+                    </p>
                   </div>
                 </div>
                 <span className="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold px-3 py-1 rounded-full border border-emerald-200">
@@ -535,8 +562,10 @@ const CreateCareerPathPage: React.FC = () => {
                     <CheckCircle2 size={16} />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-[#2D1B4E]">Your career interests</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">The areas you want to grow in</p>
+                    <h4 className="text-xs font-bold text-[#2D1B4E]">Skill alignment with {selectedCareer.careerName}</h4>
+                    <p className="text-[11px] text-gray-500 font-medium">
+                      {skillGaps.length > 0 ? `${hasSkills.length} of ${skillGaps.length} required skills already held` : 'Loading skill requirements...'}
+                    </p>
                   </div>
                 </div>
                 <span className="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold px-3 py-1 rounded-full border border-emerald-200">
@@ -551,36 +580,29 @@ const CreateCareerPathPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-extrabold text-[#2D1B4E] flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                Career Analysis Complete
+                Career Analysis Ready
               </h4>
               <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-3 py-0.5 rounded-full">
-                100% Ready
+                {matchingPct}% Skills Aligned
               </span>
             </div>
 
             <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
-              <div className="bg-gradient-to-r from-emerald-500 via-[#8C3F96] to-[#9E4733] h-full rounded-full w-full" />
+              <div className="bg-gradient-to-r from-emerald-500 via-[#8C3F96] to-[#9E4733] h-full rounded-full" style={{ width: `${matchingPct}%` }} />
             </div>
 
             <p className="text-xs text-gray-600 font-medium">
-              We've identified the skills you already have and the areas you'll need to develop.
+              {gapsLoading
+                ? 'Comparing your skills against this career\'s requirements...'
+                : skillGaps.length > 0
+                ? `You already hold ${hasSkills.length} of the ${skillGaps.length} skills this career requires.`
+                : 'No matching skill requirements found.'}
             </p>
-
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold px-3 py-1 rounded-xl flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Existing strengths: 4 identified
-              </span>
-              <span className="bg-rose-50 border border-rose-200 text-[#9E4733] text-[11px] font-bold px-3 py-1 rounded-xl flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#9E4733]" />
-                Development areas: 4 identified
-              </span>
-            </div>
           </div>
 
           {/* Bottom Actions */}
           <div className="flex items-center justify-between pt-6 border-t border-gray-100">
-            <button 
+            <button
               onClick={handlePrevStep}
               className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
             >
@@ -588,7 +610,7 @@ const CreateCareerPathPage: React.FC = () => {
               <span>Back</span>
             </button>
 
-            <button 
+            <button
               onClick={handleNextStep}
               className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#2D1B4E] hover:bg-[#431F69] text-white text-xs font-bold shadow-md transition-all cursor-pointer"
             >
@@ -600,8 +622,8 @@ const CreateCareerPathPage: React.FC = () => {
       )}
 
       {/* STEP 3 FORM CARD: SKILL GAP BREAKDOWN */}
-      {currentStep === 3 && (
-        <motion.div 
+      {currentStep === 3 && selectedCareer && (
+        <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-purple-100/80 space-y-7"
@@ -610,18 +632,18 @@ const CreateCareerPathPage: React.FC = () => {
           <div className="bg-[#FAF8FC] rounded-2xl p-5 border border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#2D1B4E] to-[#8C3F96] text-white font-black text-sm flex items-center justify-center shadow-md shrink-0">
-                {selectedRole.initials || 'DA'}
+                {selectedCareer.careerName.substring(0, 2).toUpperCase()}
               </div>
               <div>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#9E4733] block mb-0.5">
                   YOUR NEW CAREER GOAL
                 </span>
-                <h4 className="text-base font-bold text-[#2D1B4E]">{selectedRole.title || 'Data Analyst'}</h4>
-                <p className="text-xs text-gray-500">{selectedRole.category || 'Technology'}</p>
+                <h4 className="text-base font-bold text-[#2D1B4E]">{selectedCareer.careerName}</h4>
+                <p className="text-xs text-gray-500">{Math.round(selectedCareer.matchScore)}% match with your profile</p>
               </div>
             </div>
 
-            <button 
+            <button
               onClick={() => setCurrentStep(1)}
               className="text-xs font-bold text-[#8C3F96] hover:text-[#73317c] bg-white hover:bg-purple-50 px-4 py-2 rounded-xl border border-purple-100 transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1"
             >
@@ -639,14 +661,17 @@ const CreateCareerPathPage: React.FC = () => {
               </h3>
             </div>
             <p className="text-xs text-gray-500 font-medium">
-              Comparing your existing capabilities against market requirements for {selectedRole.title || 'Data Analyst'}.
+              Comparing your existing capabilities against the requirements for {selectedCareer.careerName}.
             </p>
           </div>
 
-          {/* 2-Column Skill Comparison Grid */}
+          {gapsLoading ? (
+            <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3 text-xs text-[#8C3F96]">
+              Loading skill comparison...
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Left Column: YOU ALREADY HAVE (Green) */}
+            {/* Left Column: YOU ALREADY HAVE */}
             <div className="bg-[#F6FAF8] border border-emerald-200/80 rounded-2xl p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-emerald-100 pb-3">
                 <div>
@@ -656,59 +681,30 @@ const CreateCareerPathPage: React.FC = () => {
                   <p className="text-[11px] text-emerald-700 font-medium">Skills from your existing experience</p>
                 </div>
                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full">
-                  4 Identified
+                  {hasSkills.length} Identified
                 </span>
               </div>
 
-              <div className="space-y-3">
-                <div className="bg-white p-3.5 rounded-xl border border-emerald-100 shadow-2xs flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 mt-0.5">
-                    <Check size={12} />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-gray-900">Foundational Analysis</h5>
-                    <p className="text-[10px] text-gray-500 font-medium">Advanced · Evaluated from UX Research & Analytics</p>
-                  </div>
+              {hasSkills.length > 0 ? (
+                <div className="space-y-3">
+                  {hasSkills.map((skill, idx) => (
+                    <div key={idx} className="bg-white p-3.5 rounded-xl border border-emerald-100 shadow-2xs flex items-start gap-3">
+                      <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 mt-0.5">
+                        <Check size={12} />
+                      </div>
+                      <div>
+                        <h5 className="text-xs font-bold text-gray-900">{skill.skillName}</h5>
+                        <p className="text-[10px] text-gray-500 font-medium">Already mapped on your profile</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                <div className="bg-white p-3.5 rounded-xl border border-emerald-100 shadow-2xs flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 mt-0.5">
-                    <Check size={12} />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-gray-900">Spreadsheet & Data Tools</h5>
-                    <p className="text-[10px] text-gray-500 font-medium">Proficient · Validated in Prior Roles</p>
-                  </div>
-                </div>
-
-                <div className="bg-white p-3.5 rounded-xl border border-emerald-100 shadow-2xs flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 mt-0.5">
-                    <Check size={12} />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-gray-900">Problem Solving</h5>
-                    <p className="text-[10px] text-gray-500 font-medium">Core Strength · Transferable Leadership</p>
-                  </div>
-                </div>
-
-                <div className="bg-white p-3.5 rounded-xl border border-emerald-100 shadow-2xs flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 mt-0.5">
-                    <Check size={12} />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-gray-900">Research Methodologies</h5>
-                    <p className="text-[10px] text-gray-500 font-medium">Core Strength · Qualitative & Quantitative</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-emerald-100 text-[11px] font-bold text-emerald-700 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span>Strong Foundation Verified</span>
-              </div>
+              ) : (
+                <p className="text-xs text-gray-400 font-medium">No required skills mapped yet.</p>
+              )}
             </div>
 
-            {/* Right Column: TO DEVELOP (Orange/Rose) */}
+            {/* Right Column: TO DEVELOP */}
             <div className="bg-[#FFF8F6] border border-orange-200/80 rounded-2xl p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-orange-100 pb-3">
                 <div>
@@ -718,59 +714,32 @@ const CreateCareerPathPage: React.FC = () => {
                   <p className="text-[11px] text-[#9E4733] font-medium">Skills that will strengthen readiness</p>
                 </div>
                 <span className="bg-rose-100 text-[#9E4733] text-[10px] font-extrabold px-2.5 py-1 rounded-full">
-                  4 Growth Areas
+                  {developSkills.length} Growth Areas
                 </span>
               </div>
 
-              <div className="space-y-3">
-                <div className="bg-white p-3.5 rounded-xl border border-rose-100 shadow-2xs flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-rose-50 text-[#9E4733] border border-rose-200 flex items-center justify-center shrink-0 mt-0.5">
-                    <Plus size={12} />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-gray-900">Core Technical Tools</h5>
-                    <p className="text-[10px] text-gray-500 font-medium">Database querying, joins, and aggregates</p>
-                  </div>
+              {developSkills.length > 0 ? (
+                <div className="space-y-3">
+                  {developSkills.map((skill, idx) => (
+                    <div key={idx} className="bg-white p-3.5 rounded-xl border border-rose-100 shadow-2xs flex items-start gap-3">
+                      <div className="w-5 h-5 rounded-full bg-rose-50 text-[#9E4733] border border-rose-200 flex items-center justify-center shrink-0 mt-0.5">
+                        <Plus size={12} />
+                      </div>
+                      <div>
+                        <h5 className="text-xs font-bold text-gray-900">{skill.skillName}</h5>
+                        <p className="text-[10px] text-gray-500 font-medium">
+                          {PRIORITY_LABELS[skill.priority] ?? skill.priority}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                <div className="bg-white p-3.5 rounded-xl border border-rose-100 shadow-2xs flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-rose-50 text-[#9E4733] border border-rose-200 flex items-center justify-center shrink-0 mt-0.5">
-                    <Plus size={12} />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-gray-900">Domain Scripting</h5>
-                    <p className="text-[10px] text-gray-500 font-medium">Data manipulation, pandas, automation</p>
-                  </div>
-                </div>
-
-                <div className="bg-white p-3.5 rounded-xl border border-rose-100 shadow-2xs flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-rose-50 text-[#9E4733] border border-rose-200 flex items-center justify-center shrink-0 mt-0.5">
-                    <Plus size={12} />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-gray-900">Visual System Design</h5>
-                    <p className="text-[10px] text-gray-500 font-medium">Dashboards, components & presentation</p>
-                  </div>
-                </div>
-
-                <div className="bg-white p-3.5 rounded-xl border border-rose-100 shadow-2xs flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full bg-rose-50 text-[#9E4733] border border-rose-200 flex items-center justify-center shrink-0 mt-0.5">
-                    <Plus size={12} />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-gray-900">Applied Evaluation</h5>
-                    <p className="text-[10px] text-gray-500 font-medium">Probability, hypothesis testing & execution</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-orange-100 text-[11px] font-bold text-[#9E4733] flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#9E4733]" />
-                <span>Mapped to Roadmap Milestones</span>
-              </div>
+              ) : (
+                <p className="text-xs text-gray-400 font-medium">All required skills for this career are already mapped.</p>
+              )}
             </div>
-
           </div>
+          )}
 
           {/* Callout Banner */}
           <div className="bg-[#FAF4F7] border border-[#F5E1EC] rounded-2xl p-4 flex items-start gap-3 text-xs text-gray-600">
@@ -778,11 +747,11 @@ const CreateCareerPathPage: React.FC = () => {
               <Sparkles size={14} />
             </div>
             <p className="text-xs text-gray-700 leading-relaxed font-medium">
-              You already have a foundation to build on. HerNext will use these development areas to shape your new career roadmap.
+              You already have a foundation to build on. HerNext will turn these development areas into a 30/60/90 day roadmap.
             </p>
           </div>
 
-          {/* Process Roadmap Section */}
+          {/* What happens next */}
           <div className="bg-[#FAF8FC] border border-purple-100/80 rounded-2xl p-5 space-y-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -804,12 +773,12 @@ const CreateCareerPathPage: React.FC = () => {
 
               <div className="bg-white p-3.5 rounded-xl border border-purple-100 text-center space-y-1">
                 <span className="text-xs font-bold text-[#2D1B4E] block">2. Practice</span>
-                <span className="text-[10px] text-gray-400 block font-medium">Workspaces</span>
+                <span className="text-[10px] text-gray-400 block font-medium">Guided tasks</span>
               </div>
 
               <div className="bg-white p-3.5 rounded-xl border border-purple-100 text-center space-y-1">
                 <span className="text-xs font-bold text-[#2D1B4E] block">3. Challenge</span>
-                <span className="text-[10px] text-gray-400 block font-medium">Real projects</span>
+                <span className="text-[10px] text-gray-400 block font-medium">Practical challenges</span>
               </div>
 
               <div className="bg-white p-3.5 rounded-xl border border-purple-100 text-center space-y-1">
@@ -819,10 +788,16 @@ const CreateCareerPathPage: React.FC = () => {
             </div>
           </div>
 
+          {generationError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+              {generationError}
+            </div>
+          )}
+
           {/* Bottom Actions */}
           <div className="space-y-3 pt-4 border-t border-gray-100">
             <div className="flex items-center justify-between">
-              <button 
+              <button
                 onClick={handlePrevStep}
                 className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
               >
@@ -830,7 +805,7 @@ const CreateCareerPathPage: React.FC = () => {
                 <span>Back</span>
               </button>
 
-              <button 
+              <button
                 onClick={handleNextStep}
                 disabled={isSubmitting}
                 className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-[#2D1B4E] hover:bg-[#431F69] disabled:opacity-50 text-white text-xs font-bold shadow-lg transition-all cursor-pointer"
@@ -847,15 +822,15 @@ const CreateCareerPathPage: React.FC = () => {
             </div>
 
             <p className="text-center text-[11px] text-gray-400 font-medium">
-              Your existing career path is still safe. Creating this new path will not change your current roadmap.
+              Generating this roadmap will make it your active roadmap on the dashboard.
             </p>
           </div>
         </motion.div>
       )}
 
-      {/* STEP 4 FORM CARD: NEW ROADMAP READY (Matching Figma Screenshots 1 & 2) */}
-      {currentStep === 4 && (
-        <motion.div 
+      {/* STEP 4 FORM CARD: NEW ROADMAP READY */}
+      {currentStep === 4 && selectedCareer && generatedRoadmap && (
+        <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-purple-100/80 space-y-7"
@@ -864,26 +839,21 @@ const CreateCareerPathPage: React.FC = () => {
           <div className="bg-[#FAF8FC] rounded-2xl p-5 border border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#2D1B4E] to-[#8C3F96] text-white font-black text-sm flex items-center justify-center shadow-md shrink-0">
-                {selectedRole.initials || 'DA'}
+                {selectedCareer.careerName.substring(0, 2).toUpperCase()}
               </div>
               <div>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#9E4733] block mb-0.5">
                   YOUR NEW CAREER
                 </span>
-                <h4 className="text-base font-bold text-[#2D1B4E]">{selectedRole.title || 'Data Analyst'}</h4>
-                <p className="text-xs text-gray-500">{selectedRole.category || 'Technology'}</p>
+                <h4 className="text-base font-bold text-[#2D1B4E]">{selectedCareer.careerName}</h4>
+                <p className="text-xs text-gray-500">Roadmap generated · {generatedRoadmap.roadmap.title}</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 self-start sm:self-auto">
-              <span className="bg-emerald-100 text-emerald-800 text-[11px] font-bold px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Path Created · Ready to Start
-              </span>
-              <span className="text-xs font-bold text-[#8C3F96] bg-purple-50 px-3 py-1 rounded-full border border-purple-100 hidden md:inline-block">
-                2 Active Paths Available
-              </span>
-            </div>
+            <span className="bg-emerald-100 text-emerald-800 text-[11px] font-bold px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5 self-start sm:self-auto">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Path Created · Ready to Start
+            </span>
           </div>
 
           {/* Roadmap Preview Section Header */}
@@ -899,169 +869,67 @@ const CreateCareerPathPage: React.FC = () => {
             </p>
           </div>
 
-          {/* 4 Roadmap Steps List */}
+          {/* 30/60/90 Day Phase Preview */}
           <div className="space-y-3.5">
-            
-            {/* Step 1: Foundation */}
-            <div className="p-4.5 rounded-2xl bg-[#F6FAF8] border border-emerald-200/80 flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
-                  <Check size={14} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-black text-[#2D1B4E]">1. FOUNDATION</span>
-                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-2 py-0.5 rounded-md">
-                      Validated / Ready
-                    </span>
-                  </div>
-                  <h4 className="text-xs font-bold text-gray-900">
-                    {selectedRole.foundation || 'Excel · Data Fundamentals'}
-                  </h4>
-                  <p className="text-[11px] text-gray-500 font-medium mt-0.5">
-                    Based on your verified UX analytics & research background
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Step 2: Build */}
-            <div className="p-4.5 rounded-2xl bg-[#FAF8FC] border border-purple-200/80 flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="w-7 h-7 rounded-full bg-[#2D1B4E] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
-                  2
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-black text-[#2D1B4E]">2. BUILD</span>
+            {(['DAY_30', 'DAY_60', 'DAY_90'] as const).map((phase) => {
+              const tasks = generatedRoadmap.phases[phase] ?? [];
+              const phaseLabel = phase === 'DAY_30' ? '1. FOUNDATION' : phase === 'DAY_60' ? '2. BUILD' : '3. PRACTICE';
+              return (
+                <div
+                  key={phase}
+                  className="p-4.5 rounded-2xl bg-[#FAF8FC] border border-purple-100/80"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs font-black text-[#2D1B4E]`}>{phaseLabel}</span>
                     <span className="bg-purple-100 text-[#8C3F96] text-[9px] font-extrabold px-2 py-0.5 rounded-md">
-                      Next Up
+                      {phase === 'DAY_30' ? 'Days 1-30' : phase === 'DAY_60' ? 'Days 31-60' : 'Days 61-90'}
                     </span>
                   </div>
-                  <h4 className="text-xs font-bold text-gray-900">
-                    {selectedRole.build || 'SQL · Python · Data Visualization'}
-                  </h4>
                   <p className="text-[11px] text-gray-500 font-medium mt-0.5">
-                    Core technical capabilities for data-informed decision making
+                    {tasks.length} tasks · {tasks.filter((t) => t.status === 'COMPLETED').length} completed
                   </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Step 3: Practice */}
-            <div className="p-4.5 rounded-2xl bg-white border border-gray-200 flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="w-7 h-7 rounded-full border-2 border-gray-300 text-gray-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
-                  3
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-bold text-gray-700">3. PRACTICE</span>
-                    <span className="bg-gray-100 text-gray-600 text-[9px] font-extrabold px-2 py-0.5 rounded-md">
-                      Upcoming
-                    </span>
+                  <div className="mt-2 space-y-1.5">
+                    {tasks.slice(0, 2).map((task) => (
+                      <div key={task.id} className="flex items-start gap-2 text-xs">
+                        <Check size={13} className="text-[#8C3F96] shrink-0 mt-0.5" />
+                        <span className="text-gray-700 font-medium">{task.title}</span>
+                      </div>
+                    ))}
+                    {tasks.length > 2 && (
+                      <p className="text-[10px] text-gray-400 font-medium pl-5">+ {tasks.length - 2} more tasks</p>
+                    )}
                   </div>
-                  <h4 className="text-xs font-bold text-gray-800">
-                    Real-world {selectedRole.title || 'Data'} Projects
-                  </h4>
-                  <p className="text-[11px] text-gray-500 font-medium mt-0.5">
-                    Hands-on guided practice with realistic industry datasets
-                  </p>
                 </div>
-              </div>
-            </div>
-
-            {/* Step 4: Prove */}
-            <div className="p-4.5 rounded-2xl bg-white border border-gray-200 flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="w-7 h-7 rounded-full border-2 border-gray-300 text-gray-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
-                  4
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-bold text-gray-700">4. PROVE</span>
-                    <span className="bg-gray-100 text-gray-600 text-[9px] font-extrabold px-2 py-0.5 rounded-md">
-                      Milestone
-                    </span>
-                  </div>
-                  <h4 className="text-xs font-bold text-gray-800">Career Evidence</h4>
-                  <p className="text-[11px] text-gray-500 font-medium mt-0.5">
-                    Verified portfolio artifacts codifying skills to your Career Passport
-                  </p>
-                </div>
-              </div>
-            </div>
-
+              );
+            })}
           </div>
 
-          {/* Journey Box ("What this roadmap does") */}
-          <div className="bg-[#FAF8FC] border border-purple-100/80 rounded-2xl p-5 space-y-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="bg-[#2D1B4E] text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
-                  JOURNEY
-                </span>
-                <h4 className="text-xs font-extrabold text-[#2D1B4E]">What this roadmap does</h4>
-              </div>
-              <p className="text-xs text-gray-500 font-medium">
-                Your roadmap turns your skill gaps into a clear learning journey:
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-              <div className="bg-white p-3.5 rounded-xl border border-purple-100 space-y-1">
-                <span className="text-xs font-extrabold text-[#2D1B4E] uppercase block">LEARN</span>
-                <span className="text-[10px] text-gray-400 block font-medium">Core skills</span>
-              </div>
-
-              <div className="bg-white p-3.5 rounded-xl border border-purple-100 space-y-1">
-                <span className="text-xs font-extrabold text-[#2D1B4E] uppercase block">PRACTICE</span>
-                <span className="text-[10px] text-gray-400 block font-medium">Workspaces</span>
-              </div>
-
-              <div className="bg-white p-3.5 rounded-xl border border-purple-100 space-y-1">
-                <span className="text-xs font-extrabold text-[#2D1B4E] uppercase block">CHALLENGE</span>
-                <span className="text-[10px] text-gray-400 block font-medium">Real projects</span>
-              </div>
-
-              <div className="bg-white p-3.5 rounded-xl border border-purple-100 space-y-1">
-                <span className="text-xs font-extrabold text-[#2D1B4E] uppercase block">EVIDENCE</span>
-                <span className="text-[10px] text-gray-400 block font-medium">Passport ready</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Both Career Paths active banner matching Figma */}
+          {/* Both Career Paths active banner → honest replacement */}
           <div className="bg-[#FAF4F7] border border-[#F5E1EC] rounded-2xl p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="w-6 h-6 rounded-full bg-pink-100 text-[#F05A7E] flex items-center justify-center shrink-0 mt-0.5">
                 <CheckCircle2 size={15} />
               </div>
               <div>
-                <h4 className="text-xs font-bold text-[#2D1B4E]">Both Career Paths are Active & Saved</h4>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 mt-0.5 font-medium">
-                  <span><strong>Current:</strong> Product Designer <span className="text-gray-400">(In Progress · Saved)</span></span>
-                  <span><strong>New:</strong> {selectedRole.title || 'Data Analyst'} <span className="text-emerald-700 font-bold">(New · Ready to start)</span></span>
-                </div>
+                <h4 className="text-xs font-bold text-[#2D1B4E]">Your {selectedCareer.careerName} roadmap is active & saved</h4>
+                <p className="text-xs text-gray-600 mt-0.5 font-medium">
+                  You can revisit your tasks, mark them complete, and build your evidence anytime from the dashboard.
+                </p>
               </div>
             </div>
-
-            <span className="bg-pink-100/70 text-[#8C3F96] text-[10px] font-extrabold px-3 py-1 rounded-full border border-pink-200 shrink-0 self-start sm:self-auto">
-              2 Paths Active
-            </span>
           </div>
 
           {/* Footer Action Bar */}
           <div className="space-y-3 pt-4 border-t border-gray-100">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <button 
+              <button
                 onClick={() => navigate('/dashboard/path')}
                 className="w-full sm:w-auto px-5 py-3 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 Back to Career Paths
               </button>
 
-              <button 
+              <button
                 onClick={handleViewRoadmap}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl bg-[#2D1B4E] hover:bg-[#431F69] text-white text-xs font-bold shadow-lg transition-all cursor-pointer"
               >
@@ -1069,14 +937,11 @@ const CreateCareerPathPage: React.FC = () => {
                 <ArrowRight size={14} />
               </button>
             </div>
-
-            <p className="text-center text-[11px] text-gray-400 font-medium">
-              Your Product Designer roadmap is still saved and active.
-            </p>
           </div>
         </motion.div>
       )}
-
+      </>
+      )}
     </div>
   );
 };

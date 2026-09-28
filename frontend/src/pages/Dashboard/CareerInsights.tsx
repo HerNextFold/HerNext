@@ -114,7 +114,6 @@ const CareerInsights: React.FC = () => {
     };
   }, []);
 
-  const skillsList = formData.topSkills.split(',').map((s) => s.trim()).filter(Boolean);
   const topRecommendation = recommendations[0] ?? null;
   const matchScore = topRecommendation?.matchScore ?? 0;
   const displayName = user.fullName && user.fullName.trim() ? user.fullName.trim() : '';

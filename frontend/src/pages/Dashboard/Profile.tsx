@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  User, 
-  Mail, 
-  Briefcase, 
-  Building2, 
-  GraduationCap, 
-  Target, 
-  Star, 
-  Edit3, 
+import {
+  User,
+  Mail,
+  Briefcase,
+  Building2,
+  GraduationCap,
+  Target,
+  Star,
+  Edit3,
   RotateCcw,
   CheckCircle2,
   Sparkles,
@@ -17,6 +17,23 @@ import {
 } from 'lucide-react';
 import { useUserContext } from '../../context/UserContext';
 import Button from '../../components/Button';
+import { ApiError, getProfile, type CareerProfile, type EmploymentType } from '../../lib/api';
+
+const EMPLOYMENT_LABELS: Record<EmploymentType, string> = {
+  EMPLOYED: 'Employed',
+  SELF_EMPLOYED: 'Self-Employed',
+  FREELANCER: 'Freelancer',
+  STUDENT: 'Student',
+  UNEMPLOYED: 'Unemployed',
+  INFORMAL_WORKER: 'Informal Worker'
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  SELF_REPORTED: 'Self-Reported',
+  AI_DERIVED: 'AI-Derived',
+  VERIFIED: 'Verified',
+  CHALLENGE: 'Challenge'
+};
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -24,12 +41,40 @@ export default function Profile() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(user.fullName);
   const [emailInput, setEmailInput] = useState(user.email);
+  const [syncedName, setSyncedName] = useState(user.fullName);
+  const [syncedEmail, setSyncedEmail] = useState(user.email);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const [profile, setProfile] = useState<CareerProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
   useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const data = await getProfile();
+        if (!cancelled) setProfile(data);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (user.fullName !== syncedName) {
+    setSyncedName(user.fullName);
     setNameInput(user.fullName);
+  }
+  if (user.email !== syncedEmail) {
+    setSyncedEmail(user.email);
     setEmailInput(user.email);
-  }, [user.fullName, user.email]);
+  }
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +84,19 @@ export default function Profile() {
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 
+  const currentRole = profile?.currentOccupation || onboarding.currentRole || 'Not set';
+  const industry = profile?.industry || onboarding.industry || 'Not set';
+  const yearsLabel = profile ? `${profile.yearsOfExperience} yrs` : '—';
+  const employmentLabel = profile
+    ? (EMPLOYMENT_LABELS[profile.employmentType] ?? profile.employmentType)
+    : (onboarding.workSituation || 'Not set');
+  const education = profile?.education || onboarding.education || 'Not set';
+  const targetRole = profile?.targetCareer?.name || onboarding.targetRole || 'Not set';
+  const skills = profile?.existingSkills ?? [];
+  const userInitials = user.fullName
+    ? user.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : '?';
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-12">
       {/* Profile Header Banner */}
@@ -47,12 +105,16 @@ export default function Profile() {
 
         <div className="flex flex-col md:flex-row items-center md:items-start gap-6 relative z-10">
           <div className="relative group">
-            <div className="w-24 h-24 md:w-28 md:h-28 rounded-2xl overflow-hidden ring-4 ring-white/30 shadow-2xl bg-purple-100">
-              <img
-                src={user.avatar}
-                alt={user.fullName}
-                className="w-full h-full object-cover"
-              />
+            <div className="w-24 h-24 md:w-28 md:h-28 rounded-2xl overflow-hidden ring-4 ring-white/30 shadow-2xl bg-purple-100 flex items-center justify-center">
+              {user.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user.fullName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-3xl font-black text-[#2D1B4E]">{userInitials}</span>
+              )}
             </div>
             <div className="absolute -bottom-2 -right-2 bg-[#F05A7E] p-1.5 rounded-xl ring-2 ring-white text-white shadow-md">
               <Sparkles size={14} />
@@ -63,14 +125,14 @@ export default function Profile() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight font-display">
-                  {user.fullName}
+                  {user.fullName || 'HerNext Participant'}
                 </h1>
                 <p className="text-sm text-purple-200 font-medium flex items-center justify-center md:justify-start gap-2 mt-1">
                   <Briefcase size={15} />
-                  <span>{onboarding.currentRole}</span>
+                  <span>{currentRole}</span>
                   <span className="text-purple-300/60">•</span>
                   <Building2 size={15} />
-                  <span>{onboarding.industry}</span>
+                  <span>{industry}</span>
                 </p>
               </div>
 
@@ -98,35 +160,47 @@ export default function Profile() {
             <div className="pt-3 flex flex-wrap items-center justify-center md:justify-start gap-2.5">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-purple-100 border border-white/20">
                 <Award size={13} className="text-amber-300" />
-                {onboarding.yearsOfExperience} Exp
+                {yearsLabel}
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-purple-100 border border-white/20">
                 <Target size={13} className="text-emerald-300" />
-                {onboarding.goalType === 'Transition' ? `Transitioning to ${onboarding.targetRole}` : `Growing as ${onboarding.currentRole}`}
+                Targeting {targetRole}
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-purple-100 border border-white/20">
                 <CheckCircle2 size={13} className="text-sky-300" />
-                {onboarding.workSituation}
+                {employmentLabel}
               </span>
             </div>
           </div>
         </div>
       </div>
 
+      {isLoading && (
+        <div className="p-4 bg-purple-50 border border-purple-100 rounded-2xl text-[#8C3F96] text-xs font-semibold">
+          Loading your profile...
+        </div>
+      )}
+
+      {loadError && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-semibold">
+          {loadError}
+        </div>
+      )}
+
       {saveSuccess && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs font-semibold flex items-center gap-2"
         >
           <CheckCircle2 size={16} className="text-emerald-600" />
-          Profile updated successfully! All dashboard views have been re-synchronized.
+          Profile details updated locally.
         </motion.div>
       )}
 
       {/* Editable Form Modal or Inline */}
       {isEditingName && (
-        <motion.form 
+        <motion.form
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           onSubmit={handleSaveProfile}
@@ -191,11 +265,11 @@ export default function Profile() {
               <User size={16} className="text-[#8C3F96]" />
               Personal Info
             </h3>
-            
+
             <div className="space-y-4 text-xs">
               <div>
                 <span className="text-gray-400 block font-medium">Full Name</span>
-                <span className="font-bold text-gray-800 text-sm">{user.fullName}</span>
+                <span className="font-bold text-gray-800 text-sm">{user.fullName || 'HerNext Participant'}</span>
               </div>
               <div>
                 <span className="text-gray-400 block font-medium">Email</span>
@@ -208,7 +282,7 @@ export default function Profile() {
                 <span className="text-gray-400 block font-medium">Education</span>
                 <span className="font-bold text-gray-800 text-sm flex items-center gap-1.5 mt-0.5">
                   <GraduationCap size={14} className="text-purple-600" />
-                  {onboarding.education}
+                  {education}
                 </span>
               </div>
             </div>
@@ -219,23 +293,23 @@ export default function Profile() {
               <Briefcase size={16} className="text-[#8C3F96]" />
               Career Setup
             </h3>
-            
+
             <div className="space-y-4 text-xs">
               <div>
                 <span className="text-gray-400 block font-medium">Current Role</span>
-                <span className="font-bold text-[#2D1B4E] text-sm">{onboarding.currentRole}</span>
+                <span className="font-bold text-[#2D1B4E] text-sm">{currentRole}</span>
               </div>
               <div>
                 <span className="text-gray-400 block font-medium">Industry Domain</span>
-                <span className="font-bold text-gray-800 text-sm">{onboarding.industry}</span>
+                <span className="font-bold text-gray-800 text-sm">{industry}</span>
               </div>
               <div>
                 <span className="text-gray-400 block font-medium">Experience Level</span>
-                <span className="font-bold text-gray-800 text-sm">{onboarding.yearsOfExperience}</span>
+                <span className="font-bold text-gray-800 text-sm">{yearsLabel}</span>
               </div>
               <div>
                 <span className="text-gray-400 block font-medium">Employment Status</span>
-                <span className="font-bold text-gray-800 text-sm">{onboarding.workSituation}</span>
+                <span className="font-bold text-gray-800 text-sm">{employmentLabel}</span>
               </div>
             </div>
           </div>
@@ -259,20 +333,20 @@ export default function Profile() {
               <div className="bg-white p-4 rounded-2xl border border-purple-100/80 shadow-2xs">
                 <span className="text-gray-400 font-medium block">Target Career Role</span>
                 <span className="text-base font-extrabold text-[#2D1B4E] block mt-1">
-                  {onboarding.targetRole}
+                  {targetRole}
                 </span>
                 <p className="text-[11px] text-gray-500 mt-1">
-                  Tailored insights and roadmap milestones are tuned specifically for this target.
+                  Based on your AI career recommendations and roadmap.
                 </p>
               </div>
 
               <div className="bg-white p-4 rounded-2xl border border-purple-100/80 shadow-2xs">
-                <span className="text-gray-400 font-medium block">AI Competency Transfer</span>
+                <span className="text-gray-400 font-medium block">AI Impact & Skill Gaps</span>
                 <span className="text-base font-extrabold text-[#8C3F96] block mt-1">
-                  Ready for AI Integration
+                  Get your assessment
                 </span>
                 <p className="text-[11px] text-gray-500 mt-1">
-                  {onboarding.aiAnalysis || 'Strong foundational skill set ready for high-growth deployment.'}
+                  Run the AI Career Assessment to understand automation exposure, emerging skills, and gap priorities.
                 </p>
               </div>
             </div>
@@ -283,39 +357,44 @@ export default function Profile() {
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-sm font-bold text-[#2D1B4E] uppercase tracking-wider flex items-center gap-2">
                 <Star size={18} className="text-amber-500" />
-                Submitted Skills & Proficiency
+                Skills from Your Profile
               </h3>
               <span className="text-xs font-semibold text-gray-500">
-                {onboarding.skills.length} Skills Logged
+                {skills.length} Skills Logged
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {onboarding.skills.map((skill, idx) => (
-                <div 
-                  key={idx}
-                  className="flex items-center justify-between p-3.5 rounded-2xl bg-purple-50/50 border border-purple-100/80 hover:border-purple-200 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center text-[#8C3F96]">
-                      <Star size={16} />
+            {skills.length === 0 ? (
+              <p className="text-xs text-gray-400 font-medium">
+                No skills logged yet. Run the AI assessment or complete onboarding to map your skills.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {skills.map((skill, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-3.5 rounded-2xl bg-purple-50/50 border border-purple-100/80 hover:border-purple-200 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center text-[#8C3F96]">
+                        <Star size={16} />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-800">{skill.skillName}</h4>
+                        <span className="text-[10px] text-gray-500">{skill.category || 'Competency'}</span>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-800">{skill.name}</h4>
-                      <span className="text-[10px] text-gray-500">{skill.category || 'Competency'}</span>
-                    </div>
+                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                      skill.source === 'VERIFIED' ? 'bg-emerald-100 text-emerald-800' :
+                      skill.source === 'SELF_REPORTED' ? 'bg-purple-100 text-[#8C3F96]' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {SOURCE_LABELS[skill.source] ?? skill.source}
+                    </span>
                   </div>
-                  <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                    skill.level === 'Expert' ? 'bg-purple-600 text-white' :
-                    skill.level === 'Advanced' ? 'bg-[#8C3F96] text-white' :
-                    skill.level === 'Intermediate' ? 'bg-purple-100 text-[#8C3F96]' :
-                    'bg-gray-100 text-gray-700'
-                  }`}>
-                    {skill.level}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

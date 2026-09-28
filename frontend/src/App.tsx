@@ -59,7 +59,6 @@ function App() {
               <Route path="assessment" element={<CareerAssessment />} />
               <Route path="skills" element={<CareerSkills />} />
               <Route path="path" element={<CareerPath />} />
-              <Route path="career-paths/new font-sans" element={<CreateCareerPathPage />} />
               <Route path="career-paths/new" element={<CreateCareerPathPage />} />
               <Route path="roadmap" element={<CareerRoadmap />} />
               <Route path="roadmap/overview" element={<LessonOverview />} />

@@ -10,6 +10,8 @@ export interface UserProfile {
   fullName: string;
   email: string;
   avatar: string;
+  country?: string;
+  state?: string;
 }
 
 export interface OnboardingState {
@@ -45,29 +47,25 @@ export const formatNameFromEmail = (emailStr?: string): string => {
 };
 
 const DEFAULT_USER: UserProfile = {
-  fullName: 'Aisha Halima',
-  email: 'aisha.halima@hernext.com',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+  fullName: '',
+  email: '',
+  avatar: '',
+  country: '',
+  state: '',
 };
 
 const DEFAULT_ONBOARDING: OnboardingState = {
-  currentRole: 'Frontend Developer',
-  yearsOfExperience: '3-5 years',
-  workSituation: 'Full-time',
-  industry: 'Fintech',
-  education: "Bachelor's Degree",
-  skills: [
-    { name: 'React', level: 'Advanced', category: 'Technical' },
-    { name: 'TypeScript', level: 'Advanced', category: 'Technical' },
-    { name: 'Next.js', level: 'Intermediate', category: 'Technical' },
-    { name: 'Tailwind CSS', level: 'Expert', category: 'Tools' },
-    { name: 'State Management', level: 'Advanced', category: 'Technical' },
-  ],
+  currentRole: '',
+  yearsOfExperience: '',
+  workSituation: '',
+  industry: '',
+  education: '',
+  skills: [],
   goalType: 'Transition',
-  targetRole: 'AI Engineer',
-  targetSkills: ['Python', 'PyTorch', 'LLM Fine-tuning', 'Prompt Engineering'],
-  aiAnalysis: 'High capability transfer from web architecture to AI agent development.',
-  isOnboarded: true,
+  targetRole: '',
+  targetSkills: [],
+  aiAnalysis: '',
+  isOnboarded: false,
 };
 
 const STORAGE_KEY = 'hernext_user_session';

@@ -7,9 +7,6 @@ import {
   TrendingUp,
   RotateCw,
   Cpu,
-  Rocket,
-  Wrench,
-  Briefcase,
   Info,
   Plus,
   Check,
@@ -21,7 +18,6 @@ import type { SkillItem } from '../../components/dashboard/SkillDetailModal';
 import RoadmapConfirmationModal from '../../components/dashboard/RoadmapConfirmationModal';
 import DiscoveryInsightModal from '../../components/dashboard/DiscoveryInsightModal';
 import AddCustomSkillModal from '../../components/dashboard/AddCustomSkillModal';
-import { useUserContext } from '../../context/UserContext';
 import {
   ApiError,
   getCareerRecommendations,
@@ -124,11 +120,11 @@ function buildRealSkills(
 }
 
 export const MySkills: React.FC = () => {
-  const { user } = useUserContext();
   const [skillsList, setSkillsList] = useState<SkillItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [skillGaps, setSkillGaps] = useState<SkillGapsResponse | null>(null);
+  const [topCareer, setTopCareer] = useState<{ careerName: string; matchScore: number; reason: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,11 +143,13 @@ export const MySkills: React.FC = () => {
         if (cancelled) return;
 
         let gaps: SkillGapsResponse | null = null;
+        let top: { careerName: string; matchScore: number; reason: string } | null = null;
         try {
           const { recommendations } = await getCareerRecommendations(1);
-          const topCareerId = recommendations[0]?.careerId;
-          if (topCareerId) {
-            gaps = await getSkillGaps(topCareerId);
+          const topRec = recommendations[0];
+          if (topRec) {
+            top = { careerName: topRec.careerName, matchScore: topRec.matchScore, reason: topRec.reason };
+            gaps = await getSkillGaps(topRec.careerId);
           }
         } catch {
           // No career context yet (or the call failed) - Have vs Develop shows its empty state instead.
@@ -159,6 +157,7 @@ export const MySkills: React.FC = () => {
         if (cancelled) return;
 
         setSkillGaps(gaps);
+        setTopCareer(top);
         setSkillsList(buildRealSkills(profile, transferable.skills, gaps));
       } catch (err) {
         if (cancelled) return;
@@ -179,10 +178,10 @@ export const MySkills: React.FC = () => {
   const [roadmapModalSkill, setRoadmapModalSkill] = useState<string | null>(null);
   const [discoveryStepIndex, setDiscoveryStepIndex] = useState<number | null>(null);
   const [showAddCustomModal, setShowAddCustomModal] = useState(false);
-  const [insightStageModal, setInsightStageModal] = useState<{ title: string; desc: string; role: string; salary: string } | null>(null);
+  const [insightStageModal, setInsightStageModal] = useState<{ title: string; desc: string } | null>(null);
   const [haveDevelopDetail, setHaveDevelopDetail] = useState<{ title: string; type: 'have' | 'develop'; desc: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [savedSkillIds, setSavedSkillIds] = useState<string[]>(['user-research', 'prototyping']);
+  const [savedSkillIds, setSavedSkillIds] = useState<string[]>([]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -211,7 +210,7 @@ export const MySkills: React.FC = () => {
     return true;
   });
 
-  const containerVariants: any = {
+  const containerVariants = {
     hidden: { opacity: 0 },
     show: {
       opacity: 1,
@@ -219,7 +218,7 @@ export const MySkills: React.FC = () => {
     }
   };
 
-  const itemVariants: any = {
+  const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { duration: 0.45 } }
   };
@@ -340,7 +339,7 @@ export const MySkills: React.FC = () => {
                 onClick={() => {
                   if (skillsList.length === 0) return;
                   setSelectedSkill(skillsList[0]);
-                  showToast(`Opened detailed breakdown for ${user.fullName}`);
+                  showToast('Opened skill detail breakdown');
                 }}
                 className="bg-[#2D1B4E] hover:bg-[#3D1E68] text-white font-bold text-xs px-6 py-3 rounded-xl flex items-center justify-center sm:justify-start gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -483,7 +482,7 @@ export const MySkills: React.FC = () => {
                 </div>
                 <h4 className="font-bold text-[#2D1B4E] text-sm mb-1">Data Gathered</h4>
                 <p className="text-xs text-gray-500 max-w-xs leading-relaxed">
-                  Analyzed your portfolio and resume.
+                  Analyzed your profile and experience records.
                 </p>
               </motion.div>
 
@@ -503,7 +502,7 @@ export const MySkills: React.FC = () => {
                 </div>
                 <h4 className="font-bold text-[#2D1B4E] text-sm mb-1">AI Analysis</h4>
                 <p className="text-xs text-gray-500 max-w-xs leading-relaxed">
-                  Mapped to 10k+ successful paths.
+                  Mapped against the approved HerNext skill catalogue.
                 </p>
               </motion.div>
 
@@ -615,6 +614,7 @@ export const MySkills: React.FC = () => {
         </motion.div>
 
         {/* 6. HerNext Insight Card */}
+        {skillGaps && topCareer && (
         <motion.div variants={itemVariants}>
           <div className="bg-[#331842] text-white rounded-3xl p-6 sm:p-10 shadow-xl relative overflow-hidden">
             {/* Ambient purple orb */}
@@ -631,23 +631,25 @@ export const MySkills: React.FC = () => {
             {/* 3 Steps Progression */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
               {/* Node 1 */}
-              <motion.div 
+              <motion.div
                 whileHover={{ y: -2 }}
                 onClick={() => setInsightStageModal({
-                  title: 'Deep Design Expertise',
-                  desc: 'Your proven 5+ years of user empathy, UX heuristics, and interactive prototyping form the perfect substrate for AI leadership.',
-                  role: 'Senior Product Designer',
-                  salary: '$135,000 - $160,000'
+                  title: 'Skills you already have',
+                  desc: skillGaps.skills.filter(s => s.status === 'HAS_SKILL').length > 0
+                    ? `These confirmed skills map directly to ${skillGaps.career.name}: ${skillGaps.skills.filter(s => s.status === 'HAS_SKILL').map(s => s.skillName).join(', ')}.`
+                    : `No confirmed skills matched ${skillGaps.career.name} yet.`,
                 })}
                 className="flex flex-col items-center text-center p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/5"
               >
                 <div className="w-12 h-12 rounded-2xl bg-white/10 text-white flex items-center justify-center mb-3">
-                  <Briefcase size={20} />
+                  <CheckCircle2 size={20} />
                 </div>
                 <span className="text-[10px] text-purple-200/60 font-bold uppercase tracking-wider block mb-1">
                   WHAT YOU HAVE
                 </span>
-                <h4 className="font-bold text-white text-sm">Deep Design Expertise</h4>
+                <h4 className="font-bold text-white text-sm">
+                  {skillGaps.skills.filter(s => s.status === 'HAS_SKILL').length} established skills
+                </h4>
               </motion.div>
 
               {/* Arrow 1 */}
@@ -656,23 +658,25 @@ export const MySkills: React.FC = () => {
               </div>
 
               {/* Node 2 */}
-              <motion.div 
+              <motion.div
                 whileHover={{ y: -2 }}
                 onClick={() => setInsightStageModal({
-                  title: 'Strategic Product Thinking',
-                  desc: 'By adding LLM prompt testing, latency UX, and business metrics, you upgrade from IC visual design to end-to-end strategic problem solver.',
-                  role: 'Lead AI Experience Architect',
-                  salary: '$170,000 - $195,000'
+                  title: 'Skills to develop',
+                  desc: skillGaps.skills.filter(s => s.status === 'NEEDS_DEVELOPMENT').length > 0
+                    ? `Close these gaps to strengthen your fit for ${skillGaps.career.name}: ${skillGaps.skills.filter(s => s.status === 'NEEDS_DEVELOPMENT').map(s => s.skillName).join(', ')}.`
+                    : `No skill gaps found for ${skillGaps.career.name}.`,
                 })}
                 className="flex flex-col items-center text-center p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/5"
               >
                 <div className="w-12 h-12 rounded-2xl bg-white/10 text-white flex items-center justify-center mb-3">
-                  <Wrench size={20} />
+                  <TrendingUp size={20} />
                 </div>
                 <span className="text-[10px] text-purple-200/60 font-bold uppercase tracking-wider block mb-1">
                   WHAT YOU CAN BUILD
                 </span>
-                <h4 className="font-bold text-white text-sm">Strategic Product Thinking</h4>
+                <h4 className="font-bold text-white text-sm">
+                  {skillGaps.skills.filter(s => s.status === 'NEEDS_DEVELOPMENT').length} skills to strengthen
+                </h4>
               </motion.div>
 
               {/* Arrow 2 */}
@@ -681,29 +685,31 @@ export const MySkills: React.FC = () => {
               </div>
 
               {/* Node 3 */}
-              <motion.div 
+              <motion.div
                 whileHover={{ y: -2 }}
                 onClick={() => setInsightStageModal({
-                  title: 'AI Product Leadership',
-                  desc: 'Steer AI product directions, lead cross-functional squads, and command top compensation in high-growth AI organizations.',
-                  role: 'Director of AI Product & Design',
-                  salary: '$210,000 - $260,000'
+                  title: topCareer.careerName,
+                  desc: topCareer.reason,
                 })}
                 className="flex flex-col items-center text-center p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/5"
               >
                 <div className="w-12 h-12 rounded-2xl bg-white/10 text-white flex items-center justify-center mb-3">
-                  <Rocket size={20} />
+                  <Sparkles size={20} />
                 </div>
                 <span className="text-[10px] text-purple-200/60 font-bold uppercase tracking-wider block mb-1">
                   WHERE YOU CAN GO
                 </span>
-                <h4 className="font-bold text-white text-sm">AI Product Leadership</h4>
+                <h4 className="font-bold text-white text-sm">{topCareer.careerName} · {topCareer.matchScore}%</h4>
               </motion.div>
             </div>
           </div>
         </motion.div>
+        )}
 
         {/* 7. Recommended by HerNext Banner */}
+        {skillGaps && topCareer && (() => {
+          const topGap = skillGaps.skills.filter(s => s.status === 'NEEDS_DEVELOPMENT')[0];
+          return (
         <motion.div variants={itemVariants}>
           <div className="bg-[#FAF0E6] rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border-l-4 border-[#9E4733] shadow-xs">
             <div className="space-y-1.5">
@@ -712,30 +718,36 @@ export const MySkills: React.FC = () => {
                 <span>RECOMMENDED BY HERNEXT</span>
               </div>
               <h3 className="text-base sm:text-lg font-bold text-[#2D1B4E]">
-                Strengthen your AI Product Thinking skills
+                {topGap ? `Strengthen your ${topGap.skillName} skills` : `Keep building toward ${topCareer.careerName}`}
               </h3>
               <p className="text-xs text-gray-600 max-w-2xl leading-relaxed">
-                Bridging this gap will increase your match score for AI Product Designer roles by 34%.
+                {topGap
+                  ? `Closing this high-priority gap improves your match for ${skillGaps.career.name}.`
+                  : `Your skills already cover the requirements for ${skillGaps.career.name}.`}
               </p>
             </div>
 
-            <motion.button 
+            {topGap && (
+            <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => setRoadmapModalSkill('Strategic AI Product Thinking')}
+              onClick={() => setRoadmapModalSkill(topGap.skillName)}
               className="bg-[#9E4733] hover:bg-[#863b2a] text-white font-bold text-xs px-6 py-3 rounded-xl whitespace-nowrap transition-all shadow-md cursor-pointer shrink-0"
             >
               Add to My Roadmap
             </motion.button>
+            )}
           </div>
         </motion.div>
+          );
+        })()}
 
         {/* 8. Footer Disclaimer */}
         <motion.div variants={itemVariants} className="pt-2">
           <div className="flex items-start gap-2 text-[11px] text-gray-500 leading-relaxed max-w-4xl border-t border-gray-200/80 pt-4">
             <Info size={14} className="text-gray-400 shrink-0 mt-0.5" />
             <p>
-              HerNext AI Skill Analysis evaluates your provided experience data against millions of professional trajectories to identify transferable patterns. Results are designed to guide your career exploration and should be considered alongside your personal goals.
+              HerNext AI Skill Analysis interprets the experience data you provide to surface transferable skills and career-relevant gaps. Results are designed to guide your career exploration and should be considered alongside your personal goals.
             </p>
           </div>
         </motion.div>
@@ -827,17 +839,6 @@ export const MySkills: React.FC = () => {
               <p className="text-xs text-gray-600 leading-relaxed">
                 {insightStageModal.desc}
               </p>
-
-              <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100 space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-gray-500 font-medium">Mapped Role Title:</span>
-                  <span className="font-bold text-[#2D1B4E]">{insightStageModal.role}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 font-medium">Market Compensation:</span>
-                  <span className="font-bold text-emerald-600">{insightStageModal.salary}</span>
-                </div>
-              </div>
 
               <button
                 onClick={() => {

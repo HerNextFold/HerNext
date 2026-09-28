@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { motion, type Variants } from 'motion/react';
 import {
   FileText,
   Search,
@@ -17,9 +17,12 @@ import { useUserContext } from '../../context/UserContext';
 import {
   ApiError,
   getCareerImpact,
+  getCareerRecommendations,
+  getCurrentRoadmap,
   listExperiences,
   runCareerImpact,
   type CareerImpactAnalysis,
+  type CareerRecommendation,
   type ImpactLevel,
 } from '../../lib/api';
 
@@ -53,9 +56,12 @@ const HUMAN_STRENGTH_ICONS = [Users, Lightbulb, Compass, FileText, Users, Search
 
 const CareerAssessment: React.FC = () => {
   const navigate = useNavigate();
-  const { user, onboarding } = useUserContext();
+  const { user } = useUserContext();
 
   const [analysis, setAnalysis] = useState<CareerImpactAnalysis | null>(null);
+  const [recommendations, setRecommendations] = useState<CareerRecommendation[]>([]);
+  const [phaseProgress, setPhaseProgress] = useState<{ foundation: number; development: number; proof: number } | null>(null);
+  const [hasRoadmap, setHasRoadmap] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -91,6 +97,30 @@ const CareerAssessment: React.FC = () => {
             throw err;
           }
         }
+
+        // Non-fatal enrichment: real career matches + 30/60/90 roadmap progress.
+        try {
+          const { recommendations: recs } = await getCareerRecommendations(3);
+          if (cancelled) return;
+          setRecommendations(recs);
+        } catch {
+          // Career matches stay empty if not ready yet.
+        }
+
+        try {
+          const roadmap = await getCurrentRoadmap();
+          if (cancelled) return;
+          const pct = (tasks: { status: string }[]) =>
+            tasks.length === 0 ? 0 : Math.round((tasks.filter((t) => t.status === 'COMPLETED').length / tasks.length) * 100);
+          setPhaseProgress({
+            foundation: pct(roadmap.phases.DAY_30),
+            development: pct(roadmap.phases.DAY_60),
+            proof: pct(roadmap.phases.DAY_90),
+          });
+          setHasRoadmap(true);
+        } catch {
+          // No roadmap yet - the callout shows its empty state.
+        }
       } catch (err) {
         if (cancelled) return;
         setLoadError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
@@ -112,7 +142,7 @@ const CareerAssessment: React.FC = () => {
   const augmentedTasks = analysis && analysis.augmentedTasks.length > 0 ? analysis.augmentedTasks : null;
   const humanStrengths = analysis && analysis.humanStrengths.length > 0 ? analysis.humanStrengths : null;
 
-  const container: any = {
+  const container: Variants = {
     hidden: { opacity: 0 },
     show: {
       opacity: 1,
@@ -120,7 +150,7 @@ const CareerAssessment: React.FC = () => {
     }
   };
 
-  const item: any = {
+  const item: Variants = {
     hidden: { opacity: 0, y: 25 },
     show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
   };
@@ -144,12 +174,18 @@ const CareerAssessment: React.FC = () => {
           We've analyzed your experience through the lens of emerging AI trends. This isn't just about what you've done—it's about where your unique human perspective is most valuable next.
         </p>
         <div className="inline-flex items-center gap-3.5 bg-white/90 backdrop-blur-md border border-purple-100 rounded-2xl p-2.5 px-4 shadow-xs">
-          <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-purple-200">
-            <img src={user.avatar} alt={user.fullName} className="w-full h-full object-cover" />
-          </div>
+          {user.avatar ? (
+            <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-purple-200">
+              <img src={user.avatar} alt={user.fullName} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-purple-200 bg-[#8C3F96] text-white flex items-center justify-center text-xs font-bold">
+              {user.fullName ? user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '—'}
+            </div>
+          )}
           <div>
-            <h3 className="font-bold text-[#2D1B4E] text-xs md:text-sm">{user.fullName}</h3>
-            <p className="text-[10px] text-gray-500">{onboarding.currentRole} • {onboarding.yearsOfExperience}</p>
+            <h3 className="font-bold text-[#2D1B4E] text-xs md:text-sm">{user.fullName || 'HerNext Participant'}</h3>
+            <p className="text-[10px] text-gray-500">Participant · AI Career Assessment</p>
           </div>
         </div>
       </motion.div>
@@ -172,27 +208,27 @@ const CareerAssessment: React.FC = () => {
            <div className="relative w-32 h-32 flex-shrink-0">
              <svg className="w-full h-full transform -rotate-90">
                <circle cx="64" cy="64" r="54" fill="transparent" stroke="#F4EFF7" strokeWidth="12" />
-               <motion.circle
-                 initial={{ strokeDashoffset: 339.29 }}
-                 animate={{ strokeDashoffset: 339.29 - (339.29 * (analysis?.score ?? 42)) / 100 }}
-                 transition={{ duration: 1.5, ease: "easeOut", delay: 0.3 }}
-                 cx="64" cy="64" r="54" fill="transparent" stroke="#8C3F96" strokeWidth="12" strokeDasharray="339.29"
-                 strokeLinecap="round"
-               />
+<motion.circle
+                  initial={{ strokeDashoffset: 339.29 }}
+                  animate={{ strokeDashoffset: 339.29 - (339.29 * (analysis?.score ?? 0)) / 100 }}
+                  transition={{ duration: 1.5, ease: "easeOut", delay: 0.3 }}
+                  cx="64" cy="64" r="54" fill="transparent" stroke="#8C3F96" strokeWidth="12" strokeDasharray="339.29"
+                  strokeLinecap="round"
+                />
              </svg>
              <div className="absolute inset-0 flex items-center justify-center">
-               <span className="text-3xl font-black text-[#2D1B4E]">{analysis ? formatPercent(isLoading, analysis.score) : '42%'}</span>
+                <span className="text-3xl font-black text-[#2D1B4E]">{analysis ? formatPercent(isLoading, analysis.score) : '—'}</span>
              </div>
            </div>
            <div>
              <div className="inline-block bg-purple-50 text-[#8C3F96] px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2">
-               {analysis ? `${formatImpactLevelLabel(isLoading, analysis.level)} Task Impact` : 'Moderate Task Impact'}
+                {analysis ? `${formatImpactLevelLabel(isLoading, analysis.level)} Task Impact` : 'Not Yet Assessed'}
              </div>
              <h3 className="text-lg font-bold text-[#2D1B4E] mb-1.5">AI Evolution Index</h3>
              <p className="text-xs text-gray-500 leading-relaxed">
-               {analysis
-                 ? analysis.explanation
-                 : 'Approximately 42% of routine tasks in your current role as a UI/UX Designer are likely to be automated or heavily augmented by AI in the next 3-5 years. This creates significant space to elevate your strategic value.'}
+                {analysis
+                  ? analysis.explanation
+                  : 'Complete your AI Career Assessment to see how automation and augmentation may affect your work.'}
              </p>
            </div>
         </div>
@@ -201,16 +237,26 @@ const CareerAssessment: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 text-[#D47B5A] mb-3">
                <TrendingUp size={16} />
-               <span className="text-[10px] font-bold uppercase tracking-widest">HerNext Strategic Insight</span>
+               <span className="text-[10px] font-bold uppercase tracking-widest">Emerging Skills to Build</span>
             </div>
-            <p className="text-xs md:text-sm text-gray-700 leading-relaxed font-medium">
-               Your deep experience in user empathy and complex problem framing positions you perfectly for the transition from hands-on asset creation to AI-augmented strategic product design.
-            </p>
+            {analysis && analysis.emergingSkills.length > 0 ? (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {analysis.emergingSkills.map((skill) => (
+                  <span key={skill} className="bg-white/80 border border-[#F5D8C7] text-gray-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs md:text-sm text-gray-700 leading-relaxed font-medium">
+                Complete your AI Career Assessment to see which skills are emerging in your field.
+              </p>
+            )}
           </div>
 
-          <div className="pt-4 mt-4 border-t border-[#F5D8C7] flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-500">Human Value Multiplier</span>
-            <span className="text-xs font-black text-[#D47B5A]">+3.2x vs Baseline</span>
+          <div className="pt-4 mt-4 border-t border-[#F5D8C7] flex items-center justify-between gap-3">
+            <span className="text-[11px] font-bold text-gray-500">Human Value Factors</span>
+            <span className="text-xs font-black text-[#D47B5A]">{analysis ? `${analysis.humanStrengths.length} distinct strengths` : '—'}</span>
           </div>
         </div>
       </motion.div>
@@ -237,29 +283,9 @@ const CareerAssessment: React.FC = () => {
               );
             })
           ) : (
-            <>
-              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Settings2 size={18} /></div>
-                 <div>
-                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Routine Design Variations</h4>
-                   <p className="text-[11px] text-gray-500 leading-relaxed">Generating multiple layout options for standard UI patterns.</p>
-                 </div>
-              </div>
-              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><FileText size={18} /></div>
-                 <div>
-                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Basic Documentation</h4>
-                   <p className="text-[11px] text-gray-500 leading-relaxed">Automated handoff specs and standard component documentation.</p>
-                 </div>
-              </div>
-              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Image size={18} /></div>
-                 <div>
-                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Simple Asset Production</h4>
-                   <p className="text-[11px] text-gray-500 leading-relaxed">Resizing, basic icon generation, and standard image processing.</p>
-                 </div>
-              </div>
-            </>
+            <div className="bg-white/90 backdrop-blur-md rounded-2xl p-5 border border-purple-100/70 shadow-xs text-center">
+              <p className="text-xs text-gray-500">No automation analysis yet. Complete your assessment to see which tasks AI may take over.</p>
+            </div>
           )}
         </div>
 
@@ -283,29 +309,9 @@ const CareerAssessment: React.FC = () => {
               );
             })
           ) : (
-            <>
-              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Search size={18} /></div>
-                 <div>
-                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">User Research Synthesis</h4>
-                   <p className="text-[11px] text-gray-500 leading-relaxed">Rapidly identifying patterns across large qualitative datasets.</p>
-                 </div>
-              </div>
-              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Compass size={18} /></div>
-                 <div>
-                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Design Exploration</h4>
-                   <p className="text-[11px] text-gray-500 leading-relaxed">Exploring divergent concepts faster before converging on solutions.</p>
-                 </div>
-              </div>
-              <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-purple-100/70 shadow-xs flex gap-4 items-start">
-                 <div className="bg-purple-50 p-2.5 rounded-xl text-[#8C3F96] shrink-0"><Settings2 size={18} /></div>
-                 <div>
-                   <h4 className="text-xs md:text-sm font-bold text-gray-800 mb-0.5">Prototyping Fidelity</h4>
-                   <p className="text-[11px] text-gray-500 leading-relaxed">Moving from low to high-fidelity interactions with greater speed.</p>
-                 </div>
-              </div>
-            </>
+            <div className="bg-white/90 backdrop-blur-md rounded-2xl p-5 border border-purple-100/70 shadow-xs text-center">
+              <p className="text-xs text-gray-500">No augmentation analysis yet. Complete your assessment to see where AI can strengthen your work.</p>
+            </div>
           )}
         </div>
       </motion.div>
@@ -318,162 +324,151 @@ const CareerAssessment: React.FC = () => {
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-          {(
-            humanStrengths
-              ? humanStrengths.map((label, index) => ({ label, icon: HUMAN_STRENGTH_ICONS[index % HUMAN_STRENGTH_ICONS.length] }))
-              : [
-                  { label: 'Empathy', icon: Users },
-                  { label: 'Problem Framing', icon: Lightbulb },
-                  { label: 'Design Judgment', icon: Compass },
-                  { label: 'Communication', icon: FileText },
-                  { label: 'Collaboration', icon: Users },
-                  { label: 'Strategic Sense', icon: Search }
-                ]
-          ).map((cap) => {
-            const Icon = cap.icon;
+          {humanStrengths ? humanStrengths.map((label, index) => {
+            const Icon = HUMAN_STRENGTH_ICONS[index % HUMAN_STRENGTH_ICONS.length];
             return (
               <motion.div
-                key={cap.label}
+                key={label}
                 whileHover={{ y: -4 }}
                 className="bg-white rounded-2xl py-6 px-3 shadow-xs border border-purple-50 flex flex-col items-center justify-center transition-all"
               >
                 <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-[#8C3F96] mb-2">
                   <Icon size={18} />
                 </div>
-                <span className="text-xs font-bold text-gray-800">{cap.label}</span>
+                <span className="text-xs font-bold text-gray-800">{label}</span>
               </motion.div>
             );
-          })}
+          }) : (
+            <div className="col-span-full bg-white rounded-2xl py-6 px-3 shadow-xs border border-purple-50 text-center">
+              <p className="text-xs text-gray-500">Complete your assessment to see which human strengths set you apart.</p>
+            </div>
+          )}
         </div>
       </motion.div>
 
       {/* Career Paths */}
       <motion.div variants={item} className="pt-4">
         <h2 className="text-2xl font-black text-[#2D1B4E] mb-6">Where could these skills take you?</h2>
+        {recommendations.length === 0 ? (
+          <div className="bg-white/95 backdrop-blur-md border border-purple-100 shadow-xs rounded-3xl p-8 text-center">
+            <p className="text-sm text-gray-500">
+              No career recommendations yet. Complete your profile and AI assessment to unlock your best career matches.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-[#FFF4EE] border-2 border-[#D47B5A] rounded-3xl p-6 relative flex flex-col justify-between">
-            <div>
-              <div className="inline-flex items-center gap-1 bg-[#D47B5A] text-white text-[9px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider mb-4">
-                <Search size={10} /> Recommended Fit
+          {recommendations.map((rec, index) => {
+            const isTop = index === 0;
+            return (
+              <div
+                key={rec.careerId}
+                className={`${
+                  isTop
+                    ? 'bg-[#FFF4EE] border-2 border-[#D47B5A]'
+                    : 'bg-white/90 backdrop-blur-md border border-purple-100 shadow-xs'
+                } rounded-3xl p-6 relative flex flex-col justify-between`}
+              >
+                <div>
+                  {isTop && (
+                    <div className="inline-flex items-center gap-1 bg-[#D47B5A] text-white text-[9px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider mb-4">
+                      <Search size={10} /> Recommended Fit
+                    </div>
+                  )}
+                  <div className="flex justify-between items-start mb-2">
+                     <h3 className="text-lg font-bold text-[#2D1B4E] leading-tight">{rec.careerName}</h3>
+                     <span className={`text-2xl ${isTop ? 'font-black text-[#D47B5A]' : 'font-bold text-[#2D1B4E]'}`}>{rec.matchScore}%</span>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed mb-6">
+                     {rec.reason}
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/dashboard/skills')}
+                  className={`w-full font-bold text-xs py-2.5 rounded-xl transition-colors shadow-sm cursor-pointer ${
+                    isTop
+                      ? 'bg-[#D47B5A] hover:bg-[#c26d4d] text-white'
+                      : 'bg-purple-50 hover:bg-purple-100 text-[#2D1B4E]'
+                  }`}
+                >
+                   Explore Required Skills
+                </button>
               </div>
-              <div className="flex justify-between items-start mb-2">
-                 <h3 className="text-lg font-bold text-[#2D1B4E] leading-tight">AI Product Designer</h3>
-                 <span className="text-2xl font-black text-[#D47B5A]">91%</span>
-              </div>
-              <p className="text-xs text-gray-700 leading-relaxed mb-6">
-                 Blends core UX principles with an understanding of AI models to design conversational, generative, or predictive features.
-              </p>
-            </div>
-            <button 
-              onClick={() => navigate('/dashboard/skills')}
-              className="w-full bg-[#D47B5A] hover:bg-[#c26d4d] text-white font-bold text-xs py-2.5 rounded-xl transition-colors shadow-sm cursor-pointer"
-            >
-               Explore Required Skills →
-            </button>
-          </div>
-
-          <div className="bg-white/90 backdrop-blur-md border border-purple-100 shadow-xs rounded-3xl p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                 <h3 className="text-lg font-bold text-[#2D1B4E] leading-tight">Lead UX Strategist</h3>
-                 <span className="text-2xl font-bold text-[#2D1B4E]">88%</span>
-              </div>
-              <p className="text-xs text-gray-500 leading-relaxed mb-6">
-                 A natural evolution of your current role, moving further up the strategic ladder with AI acting as a supporting tool.
-              </p>
-            </div>
-            <button 
-              onClick={() => navigate('/dashboard/skills')}
-              className="w-full bg-purple-50 hover:bg-purple-100 text-[#2D1B4E] font-bold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
-            >
-               View Skill Matrix
-            </button>
-          </div>
-
-          <div className="bg-white/90 backdrop-blur-md border border-purple-100 shadow-xs rounded-3xl p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                 <h3 className="text-lg font-bold text-[#2D1B4E] leading-tight">AI UX Researcher</h3>
-                 <span className="text-2xl font-bold text-[#2D1B4E]">81%</span>
-              </div>
-              <p className="text-xs text-gray-500 leading-relaxed mb-6">
-                 Focuses heavily on human-AI interaction, understanding mental models around trust, bias, and automation.
-              </p>
-            </div>
-            <button 
-              onClick={() => navigate('/dashboard/skills')}
-              className="w-full bg-purple-50 hover:bg-purple-100 text-[#2D1B4E] font-bold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
-            >
-               View Skill Matrix
-            </button>
-          </div>
+            );
+          })}
         </div>
+        )}
       </motion.div>
 
       {/* Personalized Roadmap Callout */}
       <motion.div variants={item} className="bg-gradient-to-r from-[#261338] via-[#431D54] to-[#612A76] rounded-3xl p-8 md:p-10 text-white flex flex-col md:flex-row items-center justify-between shadow-xl gap-8">
          <div className="md:w-1/2 space-y-3">
            <span className="text-[10px] font-bold tracking-widest uppercase bg-white/10 text-purple-200 px-3 py-1 rounded-full border border-white/10">
-             Personalized 90-Day Execution
+             Personalized 30/60/90-Day Roadmap
            </span>
-           <h2 className="text-2xl md:text-3xl font-black leading-tight">Start your tailored AI development roadmap</h2>
+           <h2 className="text-2xl md:text-3xl font-black leading-tight">Start your tailored career roadmap</h2>
            <p className="text-xs text-purple-200/80 leading-relaxed">
-             We've structured a milestone path focusing on AI Product Thinking, prompt systems, and generative UI patterns specifically for your background.
+             Your roadmap breaks down the skills you need to develop into practical 30, 60, and 90-day steps for your recommended career.
            </p>
-           <motion.button 
+           <motion.button
              whileHover={{ scale: 1.05 }}
              whileTap={{ scale: 0.95 }}
-             onClick={() => navigate('/dashboard/skills')}
+             onClick={() => navigate('/dashboard/roadmap')}
              className="bg-[#D47B5A] hover:bg-[#c26d4d] text-white font-bold px-6 py-3 rounded-xl transition-all flex items-center gap-2 text-xs shadow-lg cursor-pointer pt-2"
            >
-             <span>View My Skill Gaps</span>
+             <span>View My Roadmap</span>
              <ArrowRight size={15} />
            </motion.button>
          </div>
-         
+
          <div className="md:w-5/12 w-full bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/15 shadow-inner">
            <div className="flex justify-between items-center mb-5">
               <span className="text-[10px] font-bold text-purple-200 uppercase tracking-wider">Milestone Progress</span>
               <Settings2 size={16} className="text-purple-300" />
            </div>
+           {!hasRoadmap || !phaseProgress ? (
+             <p className="text-xs text-purple-200/80">
+               Generate your roadmap to start tracking progress through each phase.
+             </p>
+           ) : (
            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                 <div className="w-8 h-8 rounded-xl bg-[#D47B5A] text-white flex items-center justify-center text-xs font-bold shrink-0">M1</div>
-                 <div className="flex-1">
-                   <div className="flex justify-between text-[11px] mb-1">
-                     <span className="font-semibold text-white">Foundations</span>
-                     <span className="font-bold text-[#FF9E79]">85%</span>
-                   </div>
-                   <div className="h-2 bg-black/30 w-full rounded-full overflow-hidden">
-                     <div className="h-full bg-[#D47B5A] w-[85%] rounded-full"></div>
-                   </div>
-                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                 <div className="w-8 h-8 rounded-xl bg-white/10 text-white/70 flex items-center justify-center text-xs font-bold shrink-0">M2</div>
-                 <div className="flex-1">
-                   <div className="flex justify-between text-[11px] mb-1">
-                     <span className="font-semibold text-white">Applied Prototyping</span>
-                     <span className="font-bold text-white/60">30%</span>
-                   </div>
-                   <div className="h-2 bg-black/30 w-full rounded-full overflow-hidden">
-                     <div className="h-full bg-white/40 w-[30%] rounded-full"></div>
-                   </div>
-                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                 <div className="w-8 h-8 rounded-xl bg-white/10 text-white/50 flex items-center justify-center text-xs font-bold shrink-0">M3</div>
-                 <div className="flex-1">
-                   <div className="flex justify-between text-[11px] mb-1">
-                     <span className="font-semibold text-white/60">Executive Polish</span>
-                     <span className="font-bold text-white/40">0%</span>
-                   </div>
-                   <div className="h-2 bg-black/30 w-full rounded-full overflow-hidden">
-                     <div className="h-full bg-white/20 w-[0%] rounded-full"></div>
-                   </div>
-                 </div>
-              </div>
+             <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#D47B5A] text-white flex items-center justify-center text-xs font-bold shrink-0">M1</div>
+                <div className="flex-1">
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="font-semibold text-white">Foundation</span>
+                    <span className="font-bold text-[#FF9E79]">{phaseProgress.foundation}%</span>
+                  </div>
+                  <div className="h-2 bg-black/30 w-full rounded-full overflow-hidden">
+                    <div className="h-full bg-[#D47B5A] rounded-full" style={{ width: `${phaseProgress.foundation}%` }}></div>
+                  </div>
+                </div>
+             </div>
+             <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-white/10 text-white/70 flex items-center justify-center text-xs font-bold shrink-0">M2</div>
+                <div className="flex-1">
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="font-semibold text-white">Development</span>
+                    <span className="font-bold text-white/60">{phaseProgress.development}%</span>
+                  </div>
+                  <div className="h-2 bg-black/30 w-full rounded-full overflow-hidden">
+                    <div className="h-full bg-white/40 rounded-full" style={{ width: `${phaseProgress.development}%` }}></div>
+                  </div>
+                </div>
+             </div>
+             <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-white/10 text-white/50 flex items-center justify-center text-xs font-bold shrink-0">M3</div>
+                <div className="flex-1">
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="font-semibold text-white/60">Career Proof</span>
+                    <span className="font-bold text-white/40">{phaseProgress.proof}%</span>
+                  </div>
+                  <div className="h-2 bg-black/30 w-full rounded-full overflow-hidden">
+                    <div className="h-full bg-white/20 rounded-full" style={{ width: `${phaseProgress.proof}%` }}></div>
+                  </div>
+                </div>
+             </div>
            </div>
+           )}
          </div>
       </motion.div>
     </motion.div>

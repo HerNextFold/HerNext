@@ -1,21 +1,23 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  User, 
-  ShieldCheck, 
-  Lock, 
-  Bell, 
-  Eye, 
-  Sparkles, 
-  Trash2, 
-  Check, 
+import {
+  User,
+  ShieldCheck,
+  Lock,
+  Bell,
+  Eye,
+  Sparkles,
+  Trash2,
+  Check,
   AlertTriangle,
   LogOut,
   X,
   Edit2
 } from 'lucide-react';
+import { LocationSelects } from '../../components/LocationSelects';
 import { useUserContext } from '../../context/UserContext';
+import { ApiError, getCurrentUser, getProfile, updateProfile, type CareerProfile } from '../../lib/api';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -36,9 +38,62 @@ const SettingsPage: React.FC = () => {
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
 
   // Form states for account editing
-  const [editFullName, setEditFullName] = useState(user.fullName || 'Aisha Abdullah');
-  const [editEmail, setEditEmail] = useState(user.email || 'nisha@example.com');
-  const [editCountry, setEditCountry] = useState('Nigeria');
+  const [editFullName, setEditFullName] = useState(user.fullName || '');
+  const [editEmail, setEditEmail] = useState(user.email || '');
+  const [editCountry, setEditCountry] = useState(user.country || '');
+  const [editState, setEditState] = useState(user.state || '');
+
+  // Server-side source of truth for the location. The career profile is needed
+  // because PUT /profile requires those fields alongside the location.
+  const [careerProfile, setCareerProfile] = useState<CareerProfile | null>(null);
+  const [isLoadingAccount, setIsLoadingAccount] = useState(true);
+  const [isSavingAccount, setIsSavingAccount] = useState(false);
+  const [accountError, setAccountError] = useState('');
+
+  // The persisted location and identity come from the API, never from
+  // localStorage, so a refresh or a new device shows the real values.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const me = await getCurrentUser();
+        if (cancelled) return;
+
+        const fullName = `${me.firstName} ${me.lastName}`.trim();
+        setEditFullName(fullName || me.email);
+        setEditEmail(me.email);
+        setEditCountry(me.country);
+        setEditState(me.state ?? '');
+        updateUser({ fullName, email: me.email, country: me.country, state: me.state ?? '' });
+
+        try {
+          const profile = await getProfile();
+          if (!cancelled) setCareerProfile(profile);
+        } catch (err) {
+          // A 404 just means onboarding has not been completed yet; the
+          // location is still readable and editable once it is.
+          if (!(err instanceof ApiError && err.status === 404) && !cancelled) {
+            setAccountError('We could not load your career profile. Some settings may be unavailable.');
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setAccountError('We could not load your account details. Please refresh and try again.');
+        }
+      } finally {
+        if (!cancelled) setIsLoadingAccount(false);
+      }
+    }
+
+    void load();
+    return () => { cancelled = true; };
+  }, [updateUser]);
+
+  const openEditAccountModal = useCallback(() => {
+    setAccountError('');
+    setShowEditAccountModal(true);
+  }, []);
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -65,14 +120,47 @@ const SettingsPage: React.FC = () => {
     personalizedRecommendations: true,
   });
 
-  const handleSaveAccount = (e: React.FormEvent) => {
+  const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateUser({
-      fullName: editFullName,
-      email: editEmail,
-    });
-    setShowEditAccountModal(false);
-    showToast('Account details updated successfully!');
+    setAccountError('');
+
+    if (isSavingAccount) return;
+
+    if (careerProfile === null) {
+      setAccountError('Finish your onboarding first so your location can be saved.');
+      return;
+    }
+
+    setIsSavingAccount(true);
+
+    try {
+      // PUT /profile is the single write path for the user's location, and it
+      // requires the career profile fields, so they are sent back unchanged.
+      const saved = await updateProfile({
+        currentOccupation: careerProfile.currentOccupation,
+        industry: careerProfile.industry,
+        yearsOfExperience: careerProfile.yearsOfExperience,
+        employmentType: careerProfile.employmentType,
+        education: careerProfile.education,
+        country: editCountry,
+        state: editState || null,
+      });
+
+      // Reflect exactly what the backend stored.
+      setEditCountry(saved.country);
+      setEditState(saved.state ?? '');
+      setCareerProfile(saved);
+      updateUser({ country: saved.country, state: saved.state ?? '' });
+
+      setShowEditAccountModal(false);
+      showToast('Account details updated successfully!');
+    } catch (err) {
+      setAccountError(
+        err instanceof ApiError ? err.message : 'We could not save your details. Please try again.',
+      );
+    } finally {
+      setIsSavingAccount(false);
+    }
   };
 
   const handleChangePassword = (e: React.FormEvent) => {
@@ -154,9 +242,9 @@ const SettingsPage: React.FC = () => {
           </span>
           <div className="flex items-center gap-2.5 pl-2 border-l border-gray-200">
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#9E4733] to-[#8C3F96] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-              {user.fullName ? user.fullName.split(' ').map(n => n[0]).join('') : 'AA'}
+              {user.fullName ? user.fullName.split(' ').map(n => n[0]).join('') : '?'}
             </div>
-            <span className="text-xs font-bold text-[#2D1B4E]">{user.fullName || 'Aisha Abdullah'}</span>
+            <span className="text-xs font-bold text-[#2D1B4E]">{user.fullName || 'HerNext User'}</span>
           </div>
         </div>
       </div>
@@ -181,9 +269,10 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              <button 
-                onClick={() => setShowEditAccountModal(true)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8C3F96] hover:text-[#73317c] bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+              <button
+                onClick={openEditAccountModal}
+                disabled={isLoadingAccount}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8C3F96] hover:text-[#73317c] bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Edit2 size={13} /> Edit Account
               </button>
@@ -195,14 +284,18 @@ const SettingsPage: React.FC = () => {
                   <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block mb-1">
                     EMAIL ADDRESS
                   </span>
-                  <p className="text-xs font-bold text-[#2D1B4E] truncate">{user.email || 'nisha@example.com'}</p>
+                  <p className="text-xs font-bold text-[#2D1B4E] truncate">{user.email || '—'}</p>
                 </div>
 
                 <div className="bg-[#FAF8FC] p-3.5 rounded-2xl border border-purple-50">
                   <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block mb-1">
-                    COUNTRY
+                    LOCATION
                   </span>
-                  <p className="text-xs font-bold text-[#2D1B4E]">{editCountry}</p>
+                  <p className="text-xs font-bold text-[#2D1B4E]">
+                    {isLoadingAccount
+                      ? 'Loading...'
+                      : [editState, editCountry].filter(Boolean).join(', ') || '—'}
+                  </p>
                 </div>
               </div>
 
@@ -485,43 +578,52 @@ const SettingsPage: React.FC = () => {
                 </button>
               </div>
 
+              {accountError && (
+                <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-start gap-2">
+                  <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                  <span>{accountError}</span>
+                </div>
+              )}
+
               <form onSubmit={handleSaveAccount} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Full Name</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={editFullName}
                     onChange={(e) => setEditFullName(e.target.value)}
                     required
-                    className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:outline-none focus:border-[#8C3F96]"
+                    disabled
+                    title="Name changes are not supported yet"
+                    className="w-full text-xs p-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed"
                   />
+                  <p className="text-[10px] text-gray-400 mt-1">Updating your name is not available yet.</p>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Email Address</label>
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     value={editEmail}
                     onChange={(e) => setEditEmail(e.target.value)}
                     required
-                    className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:outline-none focus:border-[#8C3F96]"
+                    disabled
+                    title="Email changes are not supported yet"
+                    className="w-full text-xs p-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed"
                   />
+                  <p className="text-[10px] text-gray-400 mt-1">Updating your email is not available yet.</p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Country</label>
-                  <select 
-                    value={editCountry}
-                    onChange={(e) => setEditCountry(e.target.value)}
-                    className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:outline-none focus:border-[#8C3F96]"
-                  >
-                    <option value="Nigeria">Nigeria</option>
-                    <option value="Kenya">Kenya</option>
-                    <option value="Ghana">Ghana</option>
-                    <option value="South Africa">South Africa</option>
-                    <option value="United Kingdom">United Kingdom</option>
-                    <option value="United States">United States</option>
-                  </select>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Country & State / Province</label>
+                  <LocationSelects
+                    country={editCountry}
+                    onCountryChange={setEditCountry}
+                    state={editState}
+                    onStateChange={setEditState}
+                    idPrefix="settings"
+                    countryRequired
+                  />
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
@@ -532,11 +634,12 @@ const SettingsPage: React.FC = () => {
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     type="submit"
-                    className="px-4 py-2.5 rounded-xl bg-[#8C3F96] hover:bg-[#73317c] text-white text-xs font-bold shadow-md"
+                    disabled={isSavingAccount}
+                    className="px-4 py-2.5 rounded-xl bg-[#8C3F96] hover:bg-[#73317c] text-white text-xs font-bold shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {isSavingAccount ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>

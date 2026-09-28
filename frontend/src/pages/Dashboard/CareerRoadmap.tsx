@@ -8,20 +8,20 @@ import {
   Sparkles,
   ArrowRight,
   Lock,
-  X,
-  Crown
+  X
 } from 'lucide-react';
 import PurpleBackgroundDots from '../../components/dashboard/PurpleBackgroundDots';
 import { useNavigate } from 'react-router-dom';
 
-import { useUserContext } from '../../context/UserContext';
 import {
   ApiError,
   generateRoadmap,
   getCareerRecommendations,
   getCurrentRoadmap,
   getProgressSummary,
+  getSkillGaps,
   type RoadmapTask,
+  type RoadmapWithPhases,
 } from '../../lib/api';
 
 /** Adapts a real backend roadmap task onto the existing MilestoneStep shape
@@ -43,7 +43,7 @@ function taskToMilestone(task: RoadmapTask, index: number): MilestoneStep {
 
 function formatPercent(isLoading: boolean, value: number | undefined): string {
   if (isLoading) return '…'
-  if (value === undefined) return '32'
+  if (value === undefined) return '—'
   return `${Math.round(value)}`
 }
 
@@ -58,191 +58,16 @@ interface MilestoneStep {
   active?: boolean;
 }
 
-const getMilestonesForRole = (roleTitle: string): MilestoneStep[] => {
-  const role = (roleTitle || '').toLowerCase();
-
-  if (role.includes('graphics') || role.includes('graphic') || role.includes('visual')) {
-    return [
-      {
-        id: 'step-1',
-        number: 1,
-        title: 'Visual Design Principles & Composition',
-        subtitle: 'Master layout hierarchy, grid systems, and brand composition fundamentals.',
-        duration: '15 min',
-        type: 'LEARN',
-        completed: false,
-        active: true
-      },
-      {
-        id: 'step-2',
-        number: 2,
-        title: 'Practice: Typography & Color Systems',
-        subtitle: 'Practice Activity · Pair typography, construct palettes, and audit visual balance.',
-        duration: '20 min',
-        type: 'PRACTICE',
-        completed: false
-      },
-      {
-        id: 'step-3',
-        number: 3,
-        title: 'Challenge: Brand Identity Design System',
-        subtitle: 'Real-World Simulation · Design logo assets, brand guidelines, and vector collateral.',
-        duration: '30 min',
-        type: 'CHALLENGE',
-        completed: false
-      },
-      {
-        id: 'step-4',
-        number: 4,
-        title: 'Design Critique & Portfolio Verification',
-        subtitle: 'Career Evidence Review · Receive structured critique on your brand system package.',
-        duration: '5 min',
-        type: 'AI FEEDBACK',
-        completed: false
-      }
-    ];
-  }
-
-  if (role.includes('data') || role.includes('analyst') || role.includes('analytics')) {
-    return [
-      {
-        id: 'step-1',
-        number: 1,
-        title: 'Data Fundamentals & Excel Automation',
-        subtitle: 'Learn data cleaning, pivot tables, and statistical summaries for business datasets.',
-        duration: '15 min',
-        type: 'LEARN',
-        completed: false,
-        active: true
-      },
-      {
-        id: 'step-2',
-        number: 2,
-        title: 'Practice: SQL Queries & Aggregations',
-        subtitle: 'Practice Activity · Write SELECT queries, JOINs, subqueries, and window functions.',
-        duration: '20 min',
-        type: 'PRACTICE',
-        completed: false
-      },
-      {
-        id: 'step-3',
-        number: 3,
-        title: 'Challenge: Financial Reconciliation & Dashboarding',
-        subtitle: 'Real-World Simulation · Detect transfer discrepancies and build interactive dashboards.',
-        duration: '30 min',
-        type: 'CHALLENGE',
-        completed: false
-      },
-      {
-        id: 'step-4',
-        number: 4,
-        title: 'Data Audit & Passport Verification',
-        subtitle: 'Career Evidence Review · Verify analytical report accuracy against industry benchmarks.',
-        duration: '5 min',
-        type: 'AI FEEDBACK',
-        completed: false
-      }
-    ];
-  }
-
-  if (role.includes('frontend') || role.includes('front-end') || role.includes('web') || role.includes('developer')) {
-    return [
-      {
-        id: 'step-1',
-        number: 1,
-        title: 'Modern Frontend Architecture & React 19',
-        subtitle: 'Master component hierarchy, JSX patterns, hooks, and responsive layouts.',
-        duration: '15 min',
-        type: 'LEARN',
-        completed: false,
-        active: true
-      },
-      {
-        id: 'step-2',
-        number: 2,
-        title: 'Practice: State Management & API Integration',
-        subtitle: 'Practice Activity · Connect REST APIs, manage async loading, and control global state.',
-        duration: '20 min',
-        type: 'PRACTICE',
-        completed: false
-      },
-      {
-        id: 'step-3',
-        number: 3,
-        title: 'Challenge: Interactive Web Application Build',
-        subtitle: 'Real-World Simulation · Build a dynamic dashboard UI with Tailwind CSS & animations.',
-        duration: '30 min',
-        type: 'CHALLENGE',
-        completed: false
-      },
-      {
-        id: 'step-4',
-        number: 4,
-        title: 'Code Audit & Passport Verification',
-        subtitle: 'Career Evidence Review · Code review for performance, accessibility, and type safety.',
-        duration: '5 min',
-        type: 'AI FEEDBACK',
-        completed: false
-      }
-    ];
-  }
-
-  // Default / Product Design / Custom Role
-  return [
-    {
-      id: 'step-1',
-      number: 1,
-      title: `${roleTitle || 'Career'} Core Fundamentals & Best Practices`,
-      subtitle: `Learn essential domain concepts and foundational workflows for ${roleTitle || 'your career'}.`,
-      duration: '15 min',
-      type: 'LEARN',
-      completed: false,
-      active: true
-    },
-    {
-      id: 'step-2',
-      number: 2,
-      title: `Practice: Applied ${roleTitle || 'Skill'} Workspaces`,
-      subtitle: `Practice Activity · Interactive exercises and practical domain tasks.`,
-      duration: '20 min',
-      type: 'PRACTICE',
-      completed: false
-    },
-    {
-      id: 'step-3',
-      number: 3,
-      title: `Challenge: Real-World ${roleTitle || 'Project'} Simulation`,
-      subtitle: `Real-World Simulation · Solve an industry case study and produce deliverables.`,
-      duration: '30 min',
-      type: 'CHALLENGE',
-      completed: false
-    },
-    {
-      id: 'step-4',
-      number: 4,
-      title: 'Career Evidence Review & Verification',
-      subtitle: 'Passport Verification · Validate your project output to your Career Passport.',
-      duration: '5 min',
-      type: 'AI FEEDBACK',
-      completed: false
-    }
-  ];
-};
-
 export const CareerRoadmap: React.FC = () => {
   const navigate = useNavigate();
-  const { onboarding } = useUserContext();
-  const targetRole = onboarding?.targetRole || 'Data Analyst';
-  const fallbackMilestones = getMilestonesForRole(targetRole);
-
   const [activePhase, setActivePhase] = useState<'foundation' | 'development' | 'proof'>('foundation');
   const [showFullRoadmapModal, setShowFullRoadmapModal] = useState(false);
-  const [showProModal, setShowProModal] = useState(false);
-  const [proModalTitle, setProModalTitle] = useState('');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [dayThirtyTasks, setDayThirtyTasks] = useState<RoadmapTask[] | null>(null);
+  const [roadmapData, setRoadmapData] = useState<RoadmapWithPhases | null>(null);
   const [roadmapProgress, setRoadmapProgress] = useState<number | undefined>(undefined);
+  const [targetRole, setTargetRole] = useState('');
+  const [buildingSkills, setBuildingSkills] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [hasNoRoadmap, setHasNoRoadmap] = useState(false);
@@ -259,15 +84,37 @@ export const CareerRoadmap: React.FC = () => {
 
       try {
         const summary = await getProgressSummary();
-        if (!cancelled) setRoadmapProgress(summary.roadmapProgress);
+        if (!cancelled) {
+          setRoadmapProgress(summary.roadmapProgress);
+          setTargetRole(summary.currentCareerGoal ?? '');
+        }
       } catch {
-        // Non-fatal: the "X% complete" figure just keeps its static fallback.
+        // Non-fatal: progress and goal just stay unknown until generated.
+      }
+
+      try {
+        const { recommendations } = await getCareerRecommendations(1);
+        const topCareer = recommendations[0];
+        if (topCareer && !cancelled) {
+          try {
+            const gaps = await getSkillGaps(topCareer.careerId);
+            if (!cancelled) {
+              const develop = gaps.skills.filter((g) => g.status === 'NEEDS_DEVELOPMENT').map((g) => g.skillName);
+              setBuildingSkills(develop.length > 0 ? develop : gaps.skills.map((g) => g.skillName));
+            }
+          } catch {
+            // Non-fatal: the skills widget just stays empty.
+          }
+        }
+      } catch {
+        // Non-fatal.
       }
 
       try {
         const data = await getCurrentRoadmap();
         if (cancelled) return;
         setDayThirtyTasks(data.phases.DAY_30);
+        setRoadmapData(data);
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.code === 'RESOURCE_NOT_FOUND') {
@@ -287,7 +134,7 @@ export const CareerRoadmap: React.FC = () => {
   }, []);
 
   const realMilestones = dayThirtyTasks && dayThirtyTasks.length > 0 ? dayThirtyTasks.map(taskToMilestone) : null;
-  const milestones = realMilestones ?? fallbackMilestones;
+  const milestones = realMilestones ?? [];
   const completedCount = dayThirtyTasks?.filter((t) => t.status === 'COMPLETED').length;
   const totalCount = dayThirtyTasks?.length;
 
@@ -304,12 +151,14 @@ export const CareerRoadmap: React.FC = () => {
       }
       const generated = await generateRoadmap({ careerPathId: topCareer.careerId });
       setDayThirtyTasks(generated.phases.DAY_30);
+      setRoadmapData(generated);
       setHasNoRoadmap(false);
       try {
         const summary = await getProgressSummary();
         setRoadmapProgress(summary.roadmapProgress);
+        setTargetRole(summary.currentCareerGoal ?? topCareer.careerName);
       } catch {
-        // Non-fatal, same as the initial load.
+        setTargetRole(topCareer.careerName);
       }
     } catch (err) {
       setGenerateError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
@@ -318,26 +167,13 @@ export const CareerRoadmap: React.FC = () => {
     }
   };
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
-
-  const handleStartLesson = (_step?: MilestoneStep) => {
+  const handleStartLesson = () => {
     navigate('/dashboard/roadmap/overview');
   };
 
   const handleSelectPhase = (phase: 'foundation' | 'development' | 'proof') => {
-    if (phase === 'foundation') {
-      setActivePhase('foundation');
-      showToast('Phase 01: Foundation is active');
-    } else if (phase === 'development') {
-      setProModalTitle('Phase 02: Development (Days 31-60)');
-      setShowProModal(true);
-    } else {
-      setProModalTitle('Phase 03: Career Proof (Days 61-90)');
-      setShowProModal(true);
-    }
+    setActivePhase(phase);
+    setShowFullRoadmapModal(true);
   };
 
   const containerVariants = {
@@ -365,23 +201,6 @@ export const CareerRoadmap: React.FC = () => {
         animate="show"
         className="max-w-6xl mx-auto space-y-7 pb-24 pt-2 font-sans text-gray-800 relative z-10"
       >
-        {/* Toast Notification */}
-        <AnimatePresence>
-          {toastMessage && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              className="fixed top-20 right-8 z-50 bg-[#261338] text-white text-xs px-4 py-3 rounded-2xl shadow-2xl border border-purple-400/30 flex items-center gap-2.5 backdrop-blur-md"
-            >
-              <div className="w-6 h-6 rounded-full bg-[#F05A7E]/20 text-[#F05A7E] flex items-center justify-center">
-                <Sparkles size={13} />
-              </div>
-              <span className="font-medium">{toastMessage}</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* 1. Header Section matching Screenshot 2 */}
         <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -452,7 +271,9 @@ export const CareerRoadmap: React.FC = () => {
                 </span>
                 <div className="flex items-center gap-3">
                   <span className="text-2xl font-black text-[#2D1B4E]">{formatPercent(isLoading, roadmapProgress)}% complete</span>
-                  <span className="text-xs text-gray-400 font-medium">· 18 days left</span>
+                  {completedCount !== undefined && totalCount !== undefined && (
+                    <span className="text-xs text-gray-400 font-medium">· {completedCount} of {totalCount} steps done</span>
+                  )}
                 </div>
               </div>
 
@@ -460,7 +281,7 @@ export const CareerRoadmap: React.FC = () => {
               <div className="w-full sm:w-64 bg-purple-50 rounded-full h-2.5 overflow-hidden border border-purple-100/60">
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: `${roadmapProgress ?? 32}%` }}
+                  animate={{ width: `${roadmapProgress ?? 0}%` }}
                   transition={{ duration: 1, ease: "easeOut" }}
                   className="bg-gradient-to-r from-[#9E4733] to-[#F05A7E] h-full rounded-full"
                 />
@@ -486,40 +307,40 @@ export const CareerRoadmap: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-gray-500 font-medium">
-                  <span>Day 12 of 30</span>
-                  <span className="text-gray-400">18 days left</span>
+                  <span>{dayThirtyTasks ? `${dayThirtyTasks.length} tasks` : 'Foundation phase'}</span>
+                  <span className="text-gray-400">Days 01-30</span>
                 </div>
               </div>
 
               {/* Phase 2: Development */}
-              <div 
+              <div
                 onClick={() => handleSelectPhase('development')}
                 className="rounded-2xl p-4 border transition-all cursor-pointer relative bg-white border-purple-100/70 hover:border-purple-300 opacity-95 group"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-gray-700 group-hover:text-[#8C3F96]">02 Development</span>
-                  <span className="bg-amber-50 text-amber-600 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Lock size={10} /> Pro · Days 31-60
+                  <span className="bg-purple-50 text-[#8C3F96] border border-purple-100 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    Days 31-60
                   </span>
                 </div>
                 <div className="text-[11px] text-gray-400 font-medium">
-                  Target: Days 31-60
+                  {roadmapData?.phases.DAY_60.length ? `${roadmapData.phases.DAY_60.length} tasks` : 'Locked until Phase 1'}
                 </div>
               </div>
 
               {/* Phase 3: Career Proof */}
-              <div 
+              <div
                 onClick={() => handleSelectPhase('proof')}
                 className="rounded-2xl p-4 border transition-all cursor-pointer relative bg-white border-purple-100/70 hover:border-purple-300 opacity-95 group"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-gray-700 group-hover:text-[#8C3F96]">03 Career Proof</span>
-                  <span className="bg-amber-50 text-amber-600 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Lock size={10} /> Pro · Days 61-90
+                  <span className="bg-purple-50 text-[#8C3F96] border border-purple-100 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    Days 61-90
                   </span>
                 </div>
                 <div className="text-[11px] text-gray-400 font-medium">
-                  Target: Days 61-90
+                  {roadmapData?.phases.DAY_90.length ? `${roadmapData.phases.DAY_90.length} tasks` : 'Locked until Phase 2'}
                 </div>
               </div>
             </div>
@@ -548,7 +369,7 @@ export const CareerRoadmap: React.FC = () => {
                   </div>
                   <span className="text-xs font-semibold text-gray-400 flex items-center gap-1">
                     <Clock size={13} />
-                    {milestones[0]?.duration || '15 min'}
+                    {milestones[0]?.duration || '—'}
                   </span>
                 </div>
 
@@ -559,11 +380,11 @@ export const CareerRoadmap: React.FC = () => {
                   </div>
 
                   <h2 className="text-xl sm:text-2xl font-extrabold text-[#2D1B4E] leading-snug">
-                    {milestones[0]?.title || `Fundamentals for ${targetRole}`}
+                    {milestones[0]?.title || 'Start your career roadmap'}
                   </h2>
 
                   <p className="text-xs sm:text-sm text-gray-600 leading-relaxed max-w-xl">
-                    {milestones[0]?.subtitle || `Learn core foundational principles to kickstart your journey in ${targetRole}.`}
+                    {milestones[0]?.subtitle || 'Generate your roadmap to see your first learning step.'}
                   </p>
                 </div>
 
@@ -572,7 +393,7 @@ export const CareerRoadmap: React.FC = () => {
                   <motion.button 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => handleStartLesson(milestones[0])}
+                    onClick={() => handleStartLesson()}
                     className="bg-[#2D1B4E] hover:bg-[#431F69] text-white font-bold text-xs px-6 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
                   >
                     <span>Start Learning</span>
@@ -584,7 +405,7 @@ export const CareerRoadmap: React.FC = () => {
                 <div className="bg-[#FAF8FC] border border-purple-100/70 rounded-2xl p-3.5 text-xs text-gray-600 flex items-center gap-2.5">
                   <Sparkles size={16} className="text-[#8C3F96] shrink-0" />
                   <p className="text-[11px] leading-relaxed">
-                    <strong className="text-[#2D1B4E]">Why this matters:</strong> Build the foundation you'll need for the challenges ahead in {targetRole}.
+                    <strong className="text-[#2D1B4E]">Why this matters:</strong> Build the foundation you'll need for the challenges ahead.
                   </p>
                 </div>
               </div>
@@ -610,7 +431,7 @@ export const CareerRoadmap: React.FC = () => {
                     <motion.div 
                       key={step.id}
                       whileHover={{ x: 2 }}
-                      onClick={() => handleStartLesson(step)}
+                      onClick={() => handleStartLesson()}
                       className={`bg-white/95 backdrop-blur-md rounded-2xl p-4 border border-purple-100/70 shadow-xs flex items-center justify-between gap-4 transition-all cursor-pointer hover:border-purple-200 group`}
                     >
                       <div className="flex items-center gap-4">
@@ -652,13 +473,13 @@ export const CareerRoadmap: React.FC = () => {
                 })}
               </div>
 
-              {/* Link to view full 25 milestones */}
+              {/* Link to view full roadmap */}
               <div className="text-center pt-2">
                 <button 
                   onClick={() => setShowFullRoadmapModal(true)}
                   className="text-xs font-bold text-[#8C3F96] hover:text-[#5B2975] inline-flex items-center gap-1 transition-colors cursor-pointer"
                 >
-                  <span>Want to see all 25 milestones? View full roadmap</span>
+                  <span>Preview your full roadmap</span>
                   <ArrowRight size={13} />
                 </button>
               </div>
@@ -680,7 +501,7 @@ export const CareerRoadmap: React.FC = () => {
                   <h4 className="text-sm font-extrabold text-[#2D1B4E]">
                     {completedCount !== undefined && totalCount !== undefined
                       ? `${completedCount} of ${totalCount} steps complete`
-                      : '2 of 4 steps complete'}
+                      : 'No steps complete yet'}
                   </h4>
                   <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
                     On pace to complete Foundation. Please stay on schedule.
@@ -705,7 +526,7 @@ export const CareerRoadmap: React.FC = () => {
                 </span>
 
                 <div className="flex flex-wrap gap-2 pt-1">
-                  {['AI Product Thinking', 'AI UX', 'UX Research'].map((skill, idx) => (
+                  {buildingSkills.length > 0 ? buildingSkills.map((skill, idx) => (
                     <button 
                       key={idx}
                       onClick={() => navigate('/dashboard/skills')}
@@ -713,7 +534,9 @@ export const CareerRoadmap: React.FC = () => {
                     >
                       {skill}
                     </button>
-                  ))}
+                  )) : (
+                    <p className="text-[11px] text-gray-400">No skill targets yet.</p>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -727,10 +550,10 @@ export const CareerRoadmap: React.FC = () => {
 
                 <div>
                   <h4 className="text-xs sm:text-sm font-extrabold text-[#2D1B4E]">
-                    Career Passport Verified
+                    Career Passport
                   </h4>
                   <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
-                    Completing your next step adds verified competence evidence directly to your tamper-proof Career Passport.
+                    Completing roadmap steps, challenges, and evidence keeps your Career Passport up to date.
                   </p>
                 </div>
               </div>
@@ -751,7 +574,7 @@ export const CareerRoadmap: React.FC = () => {
         </motion.div>
       </motion.div>
 
-      {/* MODAL 1: Full 25 Milestones Drawer Modal */}
+      {/* MODAL 1: Full Roadmap Drawer Modal */}
       <AnimatePresence>
         {showFullRoadmapModal && (
           <motion.div 
@@ -770,8 +593,12 @@ export const CareerRoadmap: React.FC = () => {
             >
               <div className="flex items-center justify-between pb-4 border-b border-gray-100">
                 <div>
-                  <h3 className="text-lg font-extrabold text-[#2D1B4E]">25-Step AI Career Roadmap</h3>
-                  <p className="text-xs text-gray-500">AI Product Designer Path · 90-Day Trajectory</p>
+                  <h3 className="text-lg font-extrabold text-[#2D1B4E]">
+                    {roadmapData?.roadmap.title ?? 'Your Career Roadmap'}
+                  </h3>
+                  {targetRole && (
+                    <p className="text-xs text-gray-500">Pathway to {targetRole}</p>
+                  )}
                 </div>
                 <button 
                   onClick={() => setShowFullRoadmapModal(false)}
@@ -781,34 +608,47 @@ export const CareerRoadmap: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto py-4 space-y-3 pr-1">
-                {milestones.map((st: MilestoneStep) => (
-                  <div 
-                    key={st.id}
-                    className="p-3.5 rounded-2xl bg-purple-50/50 border border-purple-100/60 flex items-center justify-between gap-3 hover:bg-purple-50 transition-colors cursor-pointer"
-                    onClick={() => {
-                      setShowFullRoadmapModal(false);
-                      handleStartLesson(st);
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-full bg-[#2D1B4E] text-white text-xs font-bold flex items-center justify-center">
-                        {st.number}
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-[#2D1B4E]">{st.title}</h4>
-                        <span className="text-[10px] text-gray-500">{st.subtitle}</span>
-                      </div>
+              <div className="flex-1 overflow-y-auto py-4 space-y-5 pr-1">
+                {([
+                  { label: 'Foundation · Days 01-30', tasks: roadmapData?.phases.DAY_30 ?? dayThirtyTasks ?? [] },
+                  { label: 'Development · Days 31-60', tasks: roadmapData?.phases.DAY_60 ?? [] },
+                  { label: 'Career Proof · Days 61-90', tasks: roadmapData?.phases.DAY_90 ?? [] },
+                ]).map((phase) => (
+                  phase.tasks.length > 0 && (
+                    <div key={phase.label} className="space-y-3">
+                      <h4 className="text-[11px] font-extrabold tracking-wider uppercase text-[#8C3F96]">
+                        {phase.label}
+                      </h4>
+                      {phase.tasks.map((st: RoadmapTask) => (
+                        <div
+                          key={st.id}
+                          className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
+                            st.status === 'COMPLETED'
+                              ? 'bg-emerald-50/50 border-emerald-100/60'
+                              : 'bg-purple-50/50 border-purple-100/60 hover:bg-purple-50'
+                          } transition-colors`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {st.status === 'COMPLETED' ? (
+                              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-[#2D1B4E] text-white text-xs font-bold flex items-center justify-center">
+                                {st.order}
+                              </div>
+                            )}
+                            <div>
+                              <h4 className="text-xs font-bold text-[#2D1B4E]">{st.title}</h4>
+                              <span className="text-[10px] text-gray-500">{st.description}</span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold text-[#8C3F96] bg-purple-100/80 px-2 py-0.5 rounded-full shrink-0">
+                            {st.estimatedMinutes ? `${st.estimatedMinutes} min` : '—'}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    <span className="text-[10px] font-bold text-[#8C3F96] bg-purple-100/80 px-2 py-0.5 rounded-full">
-                      {st.duration}
-                    </span>
-                  </div>
+                  )
                 ))}
-                
-                <div className="p-4 text-center bg-gray-50 rounded-2xl text-xs text-gray-500 font-medium">
-                  + 19 remaining specialized modules unlocked progressively upon phase completion.
-                </div>
               </div>
 
               <button 
@@ -817,71 +657,6 @@ export const CareerRoadmap: React.FC = () => {
               >
                 Close Roadmap Preview
               </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* MODAL 2: Pro Upgrade Modal */}
-      <AnimatePresence>
-        {showProModal && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
-            onClick={() => setShowProModal(false)}
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-purple-100 text-center space-y-5"
-            >
-              <div className="w-14 h-14 bg-gradient-to-tr from-[#9E4733] to-[#F05A7E] rounded-2xl flex items-center justify-center text-white mx-auto shadow-lg shadow-pink-500/20">
-                <Crown size={28} />
-              </div>
-
-              <div className="space-y-2">
-                <span className="text-[10px] font-extrabold text-[#9E4733] uppercase tracking-wider block">
-                  HERNEXT PRO FEATURE
-                </span>
-                <h3 className="text-xl font-extrabold text-[#2D1B4E]">
-                  {proModalTitle || 'Unlock HerNext Pro'}
-                </h3>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Phase 1 (Foundation) is fully accessible on your free account. Upgrade to <strong>HerNext Pro</strong> to unlock <strong>Phase 02: Development (Days 31-60)</strong> and <strong>Phase 03: Career Proof (Days 61-90)</strong>.
-                </p>
-              </div>
-
-              <div className="bg-purple-50/70 p-4 rounded-2xl space-y-2 text-left text-xs font-semibold text-[#2D1B4E] border border-purple-100">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-[#9E4733]" /> Access 19 advanced technical AI modules
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-[#9E4733]" /> Real-world simulation challenges & AI review
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-[#9E4733]" /> Executive mentor connections & priority placement
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <button 
-                  onClick={() => setShowProModal(false)}
-                  className="w-full bg-[#9E4733] hover:bg-[#863b2a] text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
-                >
-                  Start 14-Day Free Pro Trial
-                </button>
-
-                <button 
-                  onClick={() => setShowProModal(false)}
-                  className="w-full py-2 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
-                >
-                  Continue with Foundation (Free)
-                </button>
-              </div>
             </motion.div>
           </motion.div>
         )}

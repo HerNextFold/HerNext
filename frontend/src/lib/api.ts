@@ -108,6 +108,7 @@ export interface RegisterPayload {
   email: string
   password: string
   country: string
+  state?: string
 }
 
 export interface PublicUser {
@@ -118,6 +119,7 @@ export interface PublicUser {
   emailVerified: boolean
   role: string
   country: string
+  state: string | null
 }
 
 export interface RegisterResponse {
@@ -165,6 +167,15 @@ export function resendEmailVerification(email: string): Promise<Record<string, n
   return postJson<Record<string, never>>('/auth/resend-email-verification', { email })
 }
 
+/**
+ * Returns the currently authenticated user. Used to re-hydrate the session
+ * (including `country` and `state`) from the server after a reload, so the
+ * persisted location is never sourced from local storage.
+ */
+export function getCurrentUser(): Promise<PublicUser> {
+  return authRequest<PublicUser>('GET', '/auth/me')
+}
+
 export type EmploymentType =
   | 'EMPLOYED'
   | 'SELF_EMPLOYED'
@@ -179,10 +190,14 @@ export interface UpdateProfilePayload {
   yearsOfExperience: number
   employmentType: EmploymentType
   education?: string | null
+  country?: string
+  state?: string | null
 }
 
 export interface CareerProfile {
   id: string
+  country: string
+  state: string | null
   currentOccupation: string
   industry: string
   yearsOfExperience: number
@@ -201,6 +216,8 @@ export interface CareerProfile {
  * skillIds/targetCareerId are intentionally not accepted here yet - both
  * require approved-catalogue UUIDs and no catalogue endpoint exists on the
  * backend today, while this UI only collects free text for those fields.
+ * `country`/`state` are optional: omit a field to keep its stored value, or
+ * pass `state: null` to clear the stored state or province.
  */
 export function updateProfile(payload: UpdateProfilePayload): Promise<CareerProfile> {
   return authRequest<CareerProfile>('PUT', '/profile', payload)
