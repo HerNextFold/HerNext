@@ -13,6 +13,7 @@ import {
   FileCheck,
   Target
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 export interface SkillItem {
   id: string;
@@ -23,7 +24,7 @@ export interface SkillItem {
   /** Omitted when the backend hasn't produced a confidence score for this skill yet. */
   proficiencyLevel?: 'Expert' | 'Advanced' | 'Intermediate' | 'Foundational';
   proficiencyPercent?: number;
-  icon: any;
+  icon: LucideIcon;
   color: string;
   evidence: {
     sourceTitle: string;
@@ -163,7 +164,7 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
                 : 'border-transparent text-gray-500 hover:text-gray-800'
             }`}
           >
-            <TrendingUp size={14} /> 2026 Market Value
+            <TrendingUp size={14} /> Market Impact
           </button>
           <button
             onClick={() => setActiveTab('practice')}
@@ -184,8 +185,9 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
               <div className="bg-purple-50/70 rounded-2xl p-4 border border-purple-100 flex items-start gap-3">
                 <Lightbulb size={18} className="text-[#8C3F96] shrink-0 mt-0.5" />
                 <div className="text-xs text-purple-950">
-                  <strong className="block font-bold mb-0.5">HerNext Extraction Proof:</strong>
-                  Our neural parser identified this competency by analyzing syntax patterns, case study deliverables, and technical artifacts across your uploaded profile.
+                  <strong className="block font-bold mb-0.5">How this was identified:</strong>
+                  The HerNext backend derived this skill from your stored profile and experience records.
+                  It is AI-inferred rather than verified.
                 </div>
               </div>
 
@@ -221,24 +223,26 @@ export const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
                 <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
                   <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block mb-1">Target Compensation Bump</span>
                   <span className="text-2xl font-black text-emerald-700">{skill.marketImpact.salaryBoost}</span>
-                  <span className="text-[10px] text-emerald-600 block mt-1">When paired with AI workflows</span>
+                  <span className="text-[10px] text-emerald-600 block mt-1">As supplied by the backend</span>
                 </div>
                 <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4">
                   <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block mb-1">Industry Demand Trend</span>
                   <span className="text-base font-black text-[#2D1B4E]">{skill.marketImpact.demandTrend}</span>
-                  <span className="text-[10px] text-purple-600 block mt-1">High recruiter outreach</span>
+                  <span className="text-[10px] text-purple-600 block mt-1">As supplied by the backend</span>
                 </div>
               </div>
 
               <div>
                 <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Matching Career Pathways</h4>
                 <div className="space-y-2">
+                  {skill.marketImpact.targetRoles.length === 0 && (
+                    <p className="text-xs text-gray-400">No matching pathways have been calculated for this skill yet.</p>
+                  )}
                   {skill.marketImpact.targetRoles.map((role, idx) => (
                     <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 text-xs">
                       <span className="font-semibold text-gray-800 flex items-center gap-2">
                         <Briefcase size={14} className="text-[#8C3F96]" /> {role}
                       </span>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100/60 px-2 py-0.5 rounded-full">High Match</span>
                     </div>
                   ))}
                 </div>

@@ -3,8 +3,7 @@ import { motion } from 'motion/react';
 import { 
   X, 
   Sparkles, 
-  Link as LinkIcon, 
-  Loader2 
+  Link as LinkIcon 
 } from 'lucide-react';
 import type { SkillItem } from './SkillDetailModal';
 
@@ -21,45 +20,37 @@ export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
   const [sourceType, setSourceType] = useState('Portfolio');
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [notes, setNotes] = useState('');
-  const [analyzing, setAnalyzing] = useState(false);
 
+  // Only participant-supplied fields are recorded. HerNext has no scoring
+  // endpoint for a self-declared skill, so proficiency, market impact and
+  // learning modules stay unset instead of being invented here.
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!skillName.trim()) return;
+    const name = skillName.trim();
+    if (!name) return;
 
-    setAnalyzing(true);
-    setTimeout(() => {
-      setAnalyzing(false);
-      const newSkill: SkillItem = {
-        id: `custom-${Date.now()}`,
-        name: skillName,
-        category: 'core',
-        source: sourceType,
-        description: notes || `Custom validated competency in ${skillName} backed by recent project experience.`,
-        proficiencyLevel: 'Advanced',
-        proficiencyPercent: 85,
-        icon: Sparkles,
-        color: '#8C3F96',
-        evidence: [
-          {
-            sourceTitle: `${sourceType} Submission`,
-            details: evidenceUrl ? `Extracted and parsed from ${evidenceUrl}` : 'Direct user submission with project proof',
-            extractedDate: 'Just now',
-            snippet: notes || `Demonstrated practical mastery of ${skillName}.`
-          }
-        ],
-        marketImpact: {
-          salaryBoost: '+25%',
-          targetRoles: ['AI UX Architect', 'Product Specialist'],
-          demandTrend: 'Rapidly Rising'
-        },
-        learningModules: [
-          { title: `Advanced Mastery: ${skillName}`, duration: '35 mins', difficulty: 'Advanced' }
-        ]
-      };
-      onAddSkill(newSkill);
-      onClose();
-    }, 1200);
+    const newSkill: SkillItem = {
+      id: `custom-${Date.now()}`,
+      name,
+      category: 'core',
+      source: sourceType,
+      description: notes.trim() || `Self-declared by the participant.`,
+      icon: Sparkles,
+      color: '#8C3F96',
+      evidence: evidenceUrl.trim()
+        ? [
+            {
+              sourceTitle: `${sourceType} link provided by participant`,
+              details: 'Submitted by the participant. Not verified by HerNext.',
+              extractedDate: 'Submitted just now',
+              snippet: evidenceUrl.trim()
+            }
+          ]
+        : [],
+      learningModules: []
+    };
+    onAddSkill(newSkill);
+    onClose();
   };
 
   return (
@@ -86,11 +77,11 @@ export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
           </button>
           <div className="flex items-center gap-2 text-[#F05A7E] text-[10px] font-bold uppercase tracking-wider mb-1">
             <Sparkles size={12} />
-            AI Competency Extractor
+            Self-Reported Skill
           </div>
-          <h3 className="text-xl font-bold text-white">Add New Skill for AI Validation</h3>
+          <h3 className="text-xl font-bold text-white">Add a Skill to Your Profile</h3>
           <p className="text-xs text-purple-200/80 mt-1">
-            Submit a skill or evidence link to map it into your career discovery profile.
+            Record a skill you already have. It is saved as your own claim and is not scored until HerNext assesses it.
           </p>
         </div>
 
@@ -128,7 +119,7 @@ export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">Link or Artifact URL (Optional)</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Link or Artifact URL (Optional, saved as provided)</label>
             <div className="relative">
               <LinkIcon size={14} className="absolute left-3.5 top-3 text-gray-400" />
               <input 
@@ -162,20 +153,11 @@ export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
             </button>
             <button 
               type="submit"
-              disabled={analyzing}
+              disabled={!skillName.trim()}
               className="bg-[#2D1B4E] hover:bg-[#431F69] disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              {analyzing ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  <span>Analyzing with AI...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={14} />
-                  <span>Extract & Validate</span>
-                </>
-              )}
+              <Sparkles size={14} />
+              <span>Save Skill</span>
             </button>
           </div>
         </form>

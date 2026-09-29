@@ -92,7 +92,7 @@ export default function SignUp() {
       kicker="YOUR NEXT CHAPTER"
       headline="Your experience has value. Your next step starts here."
       subtext="Join ambitious women translating their lived experience into high-impact career opportunities."
-      badgeText="Over 84% Onboarded Career Match"
+      badgeText="Career matches scored from your own profile"
     >
       <div className="space-y-6">
         <div>

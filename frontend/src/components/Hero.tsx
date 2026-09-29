@@ -77,16 +77,9 @@ export default function Hero() {
             <p className="mt-2 text-sm font-medium text-ink">
               Career Readiness
             </p>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-blush-100">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: '72%' }}
-                transition={{ duration: 0.8, delay: 0.6 }}
-                className="h-full rounded-full bg-plum-700"
-              />
-            </div>
             <p className="mt-2 text-xs text-body">
-              72% Optimized for Tech PM
+              Sample illustration. Your readiness, skills and career matches are
+              calculated from your own profile once you sign up.
             </p>
           </motion.div>
         </motion.div>

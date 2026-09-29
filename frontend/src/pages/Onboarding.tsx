@@ -1353,9 +1353,16 @@ export default function Onboarding() {
                       </button>
                     </div>
 
-                    <div className="mt-3 rounded-xl bg-slate-50 p-3.5 text-xs italic text-body border border-hairline/60">
-                      &quot;{practicalExperience || activeRolePreset.sampleExperience}&quot;
-                    </div>
+                    {practicalExperience ? (
+                      <div className="mt-3 rounded-xl bg-slate-50 p-3.5 text-xs italic text-body border border-hairline/60">
+                        &quot;{practicalExperience}&quot;
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-xl bg-slate-50 p-3.5 text-xs text-body border border-hairline/60">
+                        You did not write a practical narrative. Go back to Step 4 to add one, otherwise your
+                        experience summary will be empty.
+                      </div>
+                    )}
                   </div>
 
                   {/* Card 4: Career Direction */}

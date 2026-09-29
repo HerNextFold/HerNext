@@ -76,9 +76,11 @@ export const SavedSkillsModal: React.FC<SavedSkillsModalProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <h4 className="text-xs font-bold text-[#2D1B4E] hover:text-[#8C3F96] transition-colors">{skill.name}</h4>
-                    <span className="text-[9px] font-semibold bg-purple-100 text-[#8C3F96] px-1.5 py-0.2 rounded-full">
-                      {skill.proficiencyLevel}
-                    </span>
+                    {skill.proficiencyLevel && (
+                      <span className="text-[9px] font-semibold bg-purple-100 text-[#8C3F96] px-1.5 py-0.2 rounded-full">
+                        {skill.proficiencyLevel}
+                      </span>
+                    )}
                   </div>
                   <p className="text-[10px] text-gray-400 line-clamp-1 mt-0.5">{skill.description}</p>
                 </div>

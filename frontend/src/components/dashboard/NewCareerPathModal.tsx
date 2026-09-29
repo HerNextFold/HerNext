@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   X, 
   Sparkles, 
   Target, 
-  Loader2 
+  Loader2,
+  Info
 } from 'lucide-react';
+import { getCareerRecommendations, type CareerRecommendation } from '../../lib/api';
 
 interface NewCareerPathModalProps {
   onClose: () => void;
@@ -17,26 +19,39 @@ export const NewCareerPathModal: React.FC<NewCareerPathModalProps> = ({
   onSelectNewPath
 }) => {
   const [customRole, setCustomRole] = useState('');
-  const [analyzing, setAnalyzing] = useState(false);
+  const [recommendations, setRecommendations] = useState<CareerRecommendation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const presetPaths = [
-    { title: 'AI Product Designer', match: '91%', desc: 'Designing intuitive user interactions for intelligent AI copilots.' },
-    { title: 'UX Researcher', match: '85%', desc: 'Deepening focus on user psychology, qualitative testing, and analytics.' },
-    { title: 'Design Systems Lead', match: '82%', desc: 'Creating scalable UI component tokens and automated design libraries.' },
-    { title: 'Accessibility Specialist', match: '78%', desc: 'Championing inclusive design standards and WCAG compliance.' },
-    { title: 'AI Design Technologist', match: '88%', desc: 'Bridging React code, Framer micro-prototypes, and LLM APIs.' }
-  ];
+  // Preset trajectories come from the participant's own backend recommendations
+  // (/careers/recommendations), never from a hardcoded list with invented scores.
+  useEffect(() => {
+    let active = true;
+
+    getCareerRecommendations(6)
+      .then((data) => {
+        if (active) setRecommendations(data.recommendations ?? []);
+      })
+      .catch(() => {
+        if (active) setLoadError('We could not load your career matches.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customRole.trim()) return;
+    const title = customRole.trim();
+    if (!title) return;
 
-    setAnalyzing(true);
-    setTimeout(() => {
-      setAnalyzing(false);
-      onSelectNewPath(customRole, '89%');
-      onClose();
-    }, 1000);
+    // No match score is claimed: HerNext has no endpoint to score a custom title.
+    onSelectNewPath(title, 'Not scored');
+    onClose();
   };
 
   return (
@@ -63,13 +78,13 @@ export const NewCareerPathModal: React.FC<NewCareerPathModalProps> = ({
           </button>
           <div className="inline-flex items-center gap-1.5 bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2">
             <Sparkles size={11} />
-            HerNext AI Path Engine
+            HerNext Path Explorer
           </div>
           <h3 className="text-xl font-bold text-white mb-1">
             Explore a New Career Direction
           </h3>
           <p className="text-xs text-purple-200/80">
-            Select a target role or enter a custom title to evaluate your profile readiness.
+            Pick one of your scored matches, or enter a custom title to start a path without a match score.
           </p>
         </div>
 
@@ -86,38 +101,62 @@ export const NewCareerPathModal: React.FC<NewCareerPathModalProps> = ({
               />
               <button 
                 type="submit"
-                disabled={analyzing || !customRole.trim()}
+                disabled={!customRole.trim()}
                 className="bg-[#2D1B4E] hover:bg-[#431F69] disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
               >
-                {analyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                <span>Analyze</span>
+                <Target size={14} />
+                <span>Use this title</span>
               </button>
             </div>
           </form>
 
           <div className="relative border-t border-gray-100 my-2 pt-2">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
-              Recommended AI Trajectory Presets
-            </span>
-            
+            <div className="flex items-start gap-1.5 mb-2">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                Your Career Matches
+              </span>
+              <Info size={12} className="text-gray-400 shrink-0 mt-px" aria-label="Calculated by the HerNext backend from your profile" />
+            </div>
+            <p className="text-[10px] text-gray-400 mb-2">
+              Calculated by the HerNext backend from your profile. Custom titles entered above are not scored.
+            </p>
+
             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-              {presetPaths.map((p, idx) => (
+              {loading && (
+                <div className="flex items-center gap-2 p-3 text-xs text-gray-400">
+                  <Loader2 size={14} className="animate-spin" /> Loading your matches...
+                </div>
+              )}
+
+              {!loading && loadError && (
+                <p className="p-3 text-xs text-gray-400">{loadError}</p>
+              )}
+
+              {!loading && !loadError && recommendations.length === 0 && (
+                <p className="p-3 text-xs text-gray-400">
+                  No career matches yet. Complete onboarding so the backend can score careers against your profile.
+                </p>
+              )}
+
+              {!loading && !loadError && recommendations.map((rec) => (
                 <div 
-                  key={idx}
+                  key={rec.careerId}
                   onClick={() => {
-                    onSelectNewPath(p.title, p.match);
+                    onSelectNewPath(rec.careerName, `${rec.matchScore}% match`);
                     onClose();
                   }}
                   className="p-3 bg-gray-50 hover:bg-purple-50/70 rounded-xl border border-gray-100 transition-colors cursor-pointer flex items-center justify-between group"
                 >
                   <div className="flex-1 mr-2">
                     <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-[#2D1B4E] group-hover:text-[#8C3F96] transition-colors">{p.title}</h4>
+                      <h4 className="text-xs font-bold text-[#2D1B4E] group-hover:text-[#8C3F96] transition-colors">{rec.careerName}</h4>
                       <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100/60 px-2 py-0.2 rounded-full">
-                        {p.match} Match
+                        {rec.matchScore}% Match
                       </span>
                     </div>
-                    <p className="text-[10px] text-gray-500 line-clamp-1 mt-0.5">{p.desc}</p>
+                    {rec.reason && (
+                      <p className="text-[10px] text-gray-500 line-clamp-2 mt-0.5">{rec.reason}</p>
+                    )}
                   </div>
                   <Target size={15} className="text-gray-400 group-hover:text-[#8C3F96] shrink-0" />
                 </div>

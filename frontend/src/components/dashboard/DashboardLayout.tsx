@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -25,37 +25,72 @@ import SupportModal from './SupportModal';
 import NewCareerPathModal from './NewCareerPathModal';
 import type { SkillItem } from './SkillDetailModal';
 import { useUserContext } from '../../context/UserContext';
+import { getNextAction, getProgressSummary } from '../../lib/api';
 
-const SAMPLE_SAVED_SKILLS: SkillItem[] = [
-  {
-    id: 'user-research',
-    name: 'User Research',
-    category: 'career-relevant',
-    source: 'Portfolio',
-    description: 'Demonstrated ability to synthesize user needs into actionable insights.',
-    proficiencyLevel: 'Advanced',
-    proficiencyPercent: 80,
-    icon: Star,
-    color: '#8C3F96',
-    evidence: [],
-    marketImpact: { salaryBoost: '+28%', targetRoles: ['AI Product Designer'], demandTrend: '+42% growth' },
-    learningModules: []
-  },
-  {
-    id: 'prototyping',
-    name: 'Prototyping',
-    category: 'career-relevant',
-    source: 'GitHub',
-    description: 'Rapid translation of concepts into interactive models.',
-    proficiencyLevel: 'Expert',
-    proficiencyPercent: 95,
-    icon: Star,
-    color: '#F05A7E',
-    evidence: [],
-    marketImpact: { salaryBoost: '+35%', targetRoles: ['AI Prototyping Lead'], demandTrend: '+58% demand surge' },
-    learningModules: []
+interface ProgressNotification {
+  id: string;
+  title: string;
+  desc: string;
+}
+
+/**
+ * Builds notification items from the participant's own stored progress. Every
+ * value comes from a HerNext backend response; nothing is hardcoded and no
+ * third party is invented. Returns an empty list when the backend has nothing
+ * to report, and the panel then says so.
+ */
+function buildProgressNotifications(
+  summary: Awaited<ReturnType<typeof getProgressSummary>> | null,
+  nextAction: Awaited<ReturnType<typeof getNextAction>> | null,
+): ProgressNotification[] {
+  const items: ProgressNotification[] = [];
+
+  if (summary !== null) {
+    items.push({
+      id: 'readiness',
+      title: '📊 Your Career Readiness',
+      desc: `You are at ${Math.round(summary.careerReadiness)}% (${summary.readinessLabel}), calculated from your stored experience, skills, AI readiness and evidence.`,
+    });
+
+    if (summary.aiImpact !== null) {
+      items.push({
+        id: 'ai-impact',
+        title: '✨ Your AI Impact Score',
+        desc: `Your stored AI impact score is ${Math.round(summary.aiImpact.score)} (${summary.aiImpact.level} task impact) across your saved experience.`,
+      });
+    }
+
+    items.push({
+      id: 'skills',
+      title: '🎯 Skills Progress',
+      desc: `You have developed ${summary.skillsDeveloped} skill${summary.skillsDeveloped === 1 ? '' : 's'} and have ${summary.skillsRemaining} still to develop.`,
+    });
+
+    items.push({
+      id: 'evidence',
+      title: '🏅 Evidence & Challenges',
+      desc: `You have completed ${summary.challengesCompleted} challenge${summary.challengesCompleted === 1 ? '' : 's'} and created ${summary.evidenceCreated} piece${summary.evidenceCreated === 1 ? '' : 's'} of evidence.`,
+    });
   }
-];
+
+  if (nextAction !== null) {
+    items.push({
+      id: 'next-action',
+      title: '➡️ Your Next Recommended Action',
+      desc: nextAction.action,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * Bookmarked skills are populated from the participant's own saved skill
+ * records. No demo skills are seeded, because a fabricated skill with a
+ * fabricated salary boost or demand trend must never be shown as the user's
+ * own. The SavedSkillsModal renders an honest empty state until real records
+ * exist.
+ */
 
 const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
@@ -68,7 +103,29 @@ const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [showNewPathModal, setShowNewPathModal] = useState(false);
   const [activeModal, setActiveModal] = useState<string | null>(null);
-  const [savedSkills, setSavedSkills] = useState<SkillItem[]>(SAMPLE_SAVED_SKILLS);
+  const [savedSkills, setSavedSkills] = useState<SkillItem[]>([]);
+  const [progressActivity, setProgressActivity] = useState<ProgressNotification[]>([]);
+
+  // Notification items are read from the participant's own backend records.
+  // A failure here simply leaves the list empty; it never falls back to
+  // placeholder activity.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      const [summary, nextAction] = await Promise.all([
+        getProgressSummary().catch(() => null),
+        getNextAction().catch(() => null),
+      ]);
+      if (cancelled) return;
+      setProgressActivity(buildProgressNotifications(summary, nextAction));
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const isAssessmentRoute = location.pathname.includes('/assessment');
   const isSkillsRoute = location.pathname.includes('/skills');
@@ -127,11 +184,15 @@ const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) 
     }
   ];
 
-  const notifications = [
-    { id: 1, title: '✨ AI Career Assessment Ready', desc: 'Your 2026 AI Readiness report is fully compiled.', time: '2m ago' },
-    { id: 2, title: '🎯 Skill Benchmark Updated', desc: 'Strategic AI Product Thinking demand surged +58% this week.', time: '1h ago' },
-    { id: 3, title: '👩‍💻 Mentor Connection', desc: 'Sarah Lin viewed your HerNext career profile.', time: '1d ago' }
-  ];
+  // Notifications are derived from the participant's own stored progress via
+  // the HerNext backend. They are never static demo content, and no third
+  // party is ever described as having viewed or messaged the user.
+  const notifications = progressActivity.map((item) => ({
+    id: item.id,
+    title: item.title,
+    desc: item.desc,
+    time: 'Your progress',
+  }));
 
   const handleRemoveSavedSkill = (id: string) => {
     setSavedSkills(savedSkills.filter((s) => s.id !== id));
@@ -458,15 +519,22 @@ const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) 
                     </div>
 
                     <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
-                      {notifications.map((n) => (
-                        <div key={n.id} className="p-2.5 rounded-xl bg-[#FAF8FC] border border-purple-50 space-y-1 hover:bg-purple-50/50 transition-colors">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-[#2D1B4E]">
-                            <span>{n.title}</span>
-                            <span className="text-[9px] text-gray-400 font-normal">{n.time}</span>
+                      {notifications.length === 0 ? (
+                        <p className="text-[11px] text-gray-500 leading-snug p-2.5 rounded-xl bg-[#FAF8FC] border border-purple-50">
+                          Nothing to report yet. Activity appears here once your HerNext progress
+                          records have something to show.
+                        </p>
+                      ) : (
+                        notifications.map((n) => (
+                          <div key={n.id} className="p-2.5 rounded-xl bg-[#FAF8FC] border border-purple-50 space-y-1 hover:bg-purple-50/50 transition-colors">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-[#2D1B4E]">
+                              <span>{n.title}</span>
+                              <span className="text-[9px] text-gray-400 font-normal">{n.time}</span>
+                            </div>
+                            <p className="text-[10px] text-gray-500 leading-snug">{n.desc}</p>
                           </div>
-                          <p className="text-[10px] text-gray-500 leading-snug">{n.desc}</p>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
 
                     <button
@@ -559,26 +627,30 @@ const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) 
               <div className="w-14 h-14 bg-gradient-to-tr from-[#9E4733] to-[#F05A7E] rounded-2xl flex items-center justify-center text-white mx-auto mb-4 shadow-lg shadow-pink-500/20">
                 <Crown size={28} />
               </div>
-              <h3 className="text-xl font-extrabold text-[#2D1B4E] mb-2">HerNext Pro Membership</h3>
+              <h3 className="text-xl font-extrabold text-[#2D1B4E] mb-2">Your HerNext Journey</h3>
               <p className="text-xs text-gray-500 mb-6 leading-relaxed">
-                Accelerate your career transition into high-paying AI tech leadership roles with 1-on-1 executive mentorship and priority hiring access.
+                Everything HerNext shows you is calculated by the backend from your own stored profile,
+                experience, skills and evidence. No demo data is used.
               </p>
               <div className="text-left space-y-2.5 bg-purple-50/70 p-4 rounded-2xl mb-6">
                 <div className="flex items-center gap-2 text-xs font-medium text-[#2D1B4E]">
-                  <CheckCircle2 size={16} className="text-[#9E4733]" /> Unlimited AI Roadmap & Competency Evaluations
+                  <CheckCircle2 size={16} className="text-[#9E4733]" /> Your profile and experience are stored on your account
                 </div>
                 <div className="flex items-center gap-2 text-xs font-medium text-[#2D1B4E]">
-                  <CheckCircle2 size={16} className="text-[#9E4733]" /> Verified AI Portfolio Certification Badges
+                  <CheckCircle2 size={16} className="text-[#9E4733]" /> Your roadmap and progress are derived from those records
                 </div>
                 <div className="flex items-center gap-2 text-xs font-medium text-[#2D1B4E]">
-                  <CheckCircle2 size={16} className="text-[#9E4733]" /> Private Women Tech Leadership Circle Access
+                  <CheckCircle2 size={16} className="text-[#9E4733]" /> Every skill shown comes from your own profile or the backend's analysis of it
                 </div>
               </div>
-              <button 
-                onClick={() => setShowPremiumModal(false)}
+              <button
+                onClick={() => {
+                  setShowPremiumModal(false);
+                  navigate('/dashboard/insights');
+                }}
                 className="w-full bg-[#9E4733] hover:bg-[#863b2a] text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
               >
-                Start 14-Day Free Pro Trial
+                Go to My Dashboard
               </button>
             </motion.div>
           </motion.div>

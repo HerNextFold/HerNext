@@ -27,7 +27,7 @@ const VALUE_PROPS: ValueProp[] = [
     icon: TrendingUp,
     title: 'Grow',
     description:
-      'Build your next career move with confidence. Access curated developmental paths, coaching, and a verified career passport.',
+      'Build your next career move with confidence. Access a roadmap built from your own skills, and a career passport generated from your verified records.',
   },
 ]
 
