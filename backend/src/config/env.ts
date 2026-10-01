@@ -28,7 +28,9 @@ const appEnvSchema = z.object({
   DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   JWT_REFRESH_SECRET: z.string().min(1, 'JWT_REFRESH_SECRET is required'),
-  JWT_EXPIRES_IN: z.string().min(1).default('15m'),
+  // Access-token lifetime only. The refresh token, email-verification OTP and
+  // password-reset token have their own settings and are unaffected by this.
+  JWT_EXPIRES_IN: z.string().min(1).default('3d'),
   JWT_REFRESH_EXPIRES_IN: z.string().min(1).default('7d'),
   FRONTEND_URL: z
     .string()

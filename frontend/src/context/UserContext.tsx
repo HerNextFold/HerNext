@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { SESSION_ENDED_EVENT, USER_SESSION_KEY } from '../lib/session';
 
 export interface SkillProficiency {
   name: string;
@@ -68,14 +69,12 @@ const DEFAULT_ONBOARDING: OnboardingState = {
   isOnboarded: false,
 };
 
-const STORAGE_KEY = 'hernext_user_session';
-
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(USER_SESSION_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.user && parsed.user.email) {
@@ -93,7 +92,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [onboarding, setOnboarding] = useState<OnboardingState>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(USER_SESSION_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.onboarding && parsed.onboarding.currentRole) {
@@ -110,7 +109,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       localStorage.setItem(
-        STORAGE_KEY,
+        USER_SESSION_KEY,
         JSON.stringify({ user, onboarding })
       );
     } catch (e) {
@@ -139,11 +138,26 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setOnboarding((prev) => ({ ...prev, ...updates }));
   };
 
-  const resetUserSession = () => {
+  const resetUserSession = useCallback(() => {
     setUser(DEFAULT_USER);
     setOnboarding(DEFAULT_ONBOARDING);
-    localStorage.removeItem(STORAGE_KEY);
-  };
+    try {
+      localStorage.removeItem(USER_SESSION_KEY);
+    } catch (e) {
+      console.warn('Failed to clear user session from localStorage', e);
+    }
+  }, []);
+
+  /**
+   * `endSession()` in lib/session.ts clears localStorage before it navigates,
+   * but this provider also holds the same data in memory. React unmounts
+   * during the redirect, so without this the save effect could write the stale
+   * user straight back to localStorage. Resetting first keeps the two in step.
+   */
+  useEffect(() => {
+    window.addEventListener(SESSION_ENDED_EVENT, resetUserSession);
+    return () => window.removeEventListener(SESSION_ENDED_EVENT, resetUserSession);
+  }, [resetUserSession]);
 
   return (
     <UserContext.Provider

@@ -1,18 +1,26 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { getAccessToken } from '../../lib/session'
 
 /**
- * Minimal, temporary route guard: only checks whether an access token
- * exists in localStorage. No JWT decoding, expiry checking, or backend
- * session validation yet - that lands with full session handling later.
- * Remove/replace this check in one place once that's built.
+ * Route guard for everything under /onboarding and /dashboard.
+ *
+ * The backend access token is short lived (JWT_EXPIRES_IN, 15 minutes by
+ * default) and is not refreshable from the client. So the token being absent
+ * here has two possible causes:
+ *
+ *   - the participant never signed in, or signed out deliberately; or
+ *   - the session expired and `endSession()` already cleared the token and is
+ *     navigating to sign-in.
+ *
+ * Both end at the same place, so this guard only has to send the participant to
+ * sign-in and carry where they were. The redirect loop is prevented by
+ * `endSession()` refusing to navigate while already on an authentication route.
  */
-function hasAccessToken(): boolean {
-  return Boolean(localStorage.getItem('accessToken'))
-}
-
 export default function RequireAuth() {
-  if (!hasAccessToken()) {
-    return <Navigate to="/sign-in" replace />
+  const location = useLocation()
+
+  if (!getAccessToken()) {
+    return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />
   }
 
   return <Outlet />

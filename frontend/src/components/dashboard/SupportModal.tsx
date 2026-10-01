@@ -14,6 +14,7 @@ import {
   getProfile,
   getProgressSummary,
   getTransferableSkills,
+  isSessionExpiredError,
   type CareerProfile,
   type CareerRecommendation,
   type NextAction,
@@ -48,7 +49,7 @@ interface ConciergeData {
   profileError: string;
 }
 
-type LoadState = 'loading' | 'ready' | 'error';
+type LoadState = 'loading' | 'ready' | 'error' | 'expired';
 
 const EMPTY_DATA: ConciergeData = {
   me: null,
@@ -101,6 +102,27 @@ const ANSWERABLE_TOPICS = [
 
 const NOT_LOADED =
   'I could not load your HerNext data, so I have nothing reliable to answer from. Please reopen this panel or refresh the page and try again.';
+
+/**
+ * A 401 is not missing data. `lib/api.ts` has already ended the session and
+ * started the redirect to sign-in by the time this is shown, so the panel says
+ * what is actually happening instead of implying the participant's records are
+ * broken or absent.
+ */
+const SESSION_EXPIRED =
+  'Your HerNext session has ended, so I cannot read your data right now. Taking you back to sign in - you will return to the page you were on.';
+
+/**
+ * Keeps a non-auth failure from being fatal (a 404 really does mean "not
+ * created yet"), while letting a session-expiry 401 through to the centralized
+ * handler so this panel never presents it as a data problem.
+ */
+function tolerateMissing<T>(fallback: T) {
+  return (err: unknown): T => {
+    if (isSessionExpiredError(err)) throw err;
+    return fallback;
+  };
+}
 
 function buildGreeting(data: ConciergeData): string {
   const firstName = data.me?.firstName?.trim();
@@ -225,15 +247,20 @@ export const SupportModal: React.FC<SupportModalProps> = ({ onClose }) => {
       setLoadState('loading');
       try {
         const [me, summary, recommendationsData, nextAction, transferable, profile] = await Promise.all([
-          getCurrentUser().catch(() => null),
-          getProgressSummary().catch(() => null),
-          getCareerRecommendations(3).catch(() => ({ recommendations: [] as CareerRecommendation[] })),
-          getNextAction().catch(() => null),
-          getTransferableSkills().catch(() => ({ skills: [] as TransferableSkill[] })),
+          getCurrentUser().catch(tolerateMissing<PublicUser | null>(null)),
+          getProgressSummary().catch(tolerateMissing<ProgressSummary | null>(null)),
+          getCareerRecommendations(3).catch(
+            tolerateMissing<{ recommendations: CareerRecommendation[] }>({ recommendations: [] }),
+          ),
+          getNextAction().catch(tolerateMissing<NextAction | null>(null)),
+          getTransferableSkills().catch(tolerateMissing<{ skills: TransferableSkill[] }>({ skills: [] })),
           getProfile().catch((err: unknown) => {
-            // 404 simply means onboarding is not finished; anything else is a
-            // real read failure and must not be presented as "no profile".
-            if (err instanceof ApiError && err.status === 404) return null;
+            // A 401 means the session ended, not that the data is missing, so
+            // it must reach the centralized handler untouched. A 404 simply
+            // means onboarding is not finished. Anything else is a real read
+            // failure and must not be presented as "no profile".
+            if (isSessionExpiredError(err)) throw err;
+            if (err instanceof ApiError && err.kind === 'notFound') return null;
             throw err;
           }),
         ]);
@@ -252,8 +279,15 @@ export const SupportModal: React.FC<SupportModalProps> = ({ onClose }) => {
         setData(next);
         setMessages([{ sender: 'ai', text: buildGreeting(next) }]);
         setLoadState('ready');
-      } catch {
+      } catch (err) {
         if (cancelled) return;
+        if (isSessionExpiredError(err)) {
+          // The centralized handler owns the response to an expired session.
+          setData(EMPTY_DATA);
+          setMessages([{ sender: 'ai', text: SESSION_EXPIRED }]);
+          setLoadState('expired');
+          return;
+        }
         const failed: ConciergeData = { ...EMPTY_DATA, profileError: 'load-failed' };
         setData(failed);
         setMessages([{ sender: 'ai', text: NOT_LOADED }]);
@@ -345,34 +379,43 @@ export const SupportModal: React.FC<SupportModalProps> = ({ onClose }) => {
           )}
         </div>
 
-        <div className="px-4 py-2 bg-gray-50/80 border-t border-gray-100 flex gap-1.5 overflow-x-auto no-scrollbar">
-          {QUICK_SUGGESTIONS.map((q) => (
-            <button
-              key={q}
-              onClick={() => setQuery(q)}
-              className="text-[10px] bg-white border border-purple-100 hover:border-purple-300 text-purple-900 px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer"
-            >
-              {q}
-            </button>
-          ))}
-        </div>
+        {loadState === 'expired' ? (
+            <div className="flex items-start gap-2 p-3.5 rounded-2xl bg-amber-50 text-amber-900 border border-amber-200 text-xs">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+              <span>{SESSION_EXPIRED}</span>
+            </div>
+          ) : (
+            <>
+              <div className="px-4 py-2 bg-gray-50/80 border-t border-gray-100 flex gap-1.5 overflow-x-auto no-scrollbar">
+                {QUICK_SUGGESTIONS.map((q) => (
+                  <button
+                    key={q}
+                    className="text-[10px] bg-white border border-purple-100 hover:border-purple-300 text-purple-900 px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer"
+                    onClick={() => setQuery(q)}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
 
-        <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Ask about your own skills, readiness or career path..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:border-[#8C3F96] outline-none"
-          />
-          <button
-            type="submit"
-            aria-label="Send question"
-            className="bg-[#8C3F96] hover:bg-[#722e7b] text-white p-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
-          >
-            <Send size={15} />
-          </button>
-        </form>
+              <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Ask about your own skills, readiness or career path..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="flex-1 px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:border-[#8C3F96] outline-none"
+                />
+                <button
+                  type="submit"
+                  aria-label="Send question"
+                  className="bg-[#8C3F96] hover:bg-[#722e7b] text-white p-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
+                >
+                  <Send size={15} />
+                </button>
+              </form>
+            </>
+          )}
       </motion.div>
     </motion.div>
   );

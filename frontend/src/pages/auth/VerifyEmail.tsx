@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, MailCheck } from 'lucide-react'
 import AuthLayout from '../../components/auth/AuthLayout'
 import Button from '../../components/Button'
 import { ApiError, resendEmailVerification, verifyEmailOtp } from '../../lib/api'
+import { ACCESS_TOKEN_KEY } from '../../lib/session'
 
 export default function VerifyEmail() {
   const navigate = useNavigate()
@@ -33,7 +34,7 @@ export default function VerifyEmail() {
     setIsLoading(true)
     try {
       const { accessToken } = await verifyEmailOtp({ email, code })
-      localStorage.setItem('accessToken', accessToken)
+      localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
       navigate('/sign-in')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')

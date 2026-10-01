@@ -1,17 +1,55 @@
+import { endSession, getAccessToken } from './session'
+
 const API_BASE_URL = import.meta.env.VITE_API_URL
 
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.'
 
+/**
+ * What kind of failure this is, so callers react to the cause instead of
+ * treating every rejection as "the user's data is missing".
+ *
+ * `auth` is the only kind that means the session ended. `forbidden`,
+ * `notFound`, `server` and `network` are all data/server conditions and must
+ * never trigger a sign-out.
+ */
+export type ApiErrorKind =
+  | 'auth'
+  | 'forbidden'
+  | 'notFound'
+  | 'server'
+  | 'network'
+  | 'client'
+
+function classifyStatus(status: number): ApiErrorKind {
+  if (status === 0) return 'network'
+  if (status === 401) return 'auth'
+  if (status === 403) return 'forbidden'
+  if (status === 404) return 'notFound'
+  if (status >= 500) return 'server'
+  return 'client'
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
+  readonly kind: ApiErrorKind
 
   constructor(message: string, status: number, code = '') {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.kind = classifyStatus(status)
   }
+}
+
+/**
+ * True when the failure was the backend refusing the session rather than
+ * missing data. Used to hand over to the centralized sign-out instead of
+ * rendering an error about the participant's records.
+ */
+export function isSessionExpiredError(err: unknown): boolean {
+  return err instanceof ApiError && err.kind === 'auth'
 }
 
 interface ApiSuccess<T> {
@@ -78,13 +116,19 @@ async function getJson<T>(path: string): Promise<T> {
  * Reads the access token written by loginUser()/verifyEmailOtp() from
  * localStorage, so callers (Onboarding, future Dashboard work) never need to
  * read the token or set the header themselves.
+ *
+ * This is the only helper that sends a token, which is what makes it the only
+ * safe place to treat a 401 as an ended session. The token-free helpers above
+ * are used by sign in, sign up, email verification and the public passport, so
+ * their failures (including a 401 for bad credentials) are never mistaken for
+ * an expired session.
  */
 async function authRequest<T>(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const token = localStorage.getItem('accessToken')
+  const token = getAccessToken()
   let response: Response
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
@@ -96,10 +140,22 @@ async function authRequest<T>(
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
+    // The request never completed. That is a network problem, not a session
+    // problem, so nothing is signed out here.
     throw new ApiError(GENERIC_ERROR_MESSAGE, 0)
   }
 
-  return parseEnvelope<T>(response)
+  try {
+    return await parseEnvelope<T>(response)
+  } catch (err) {
+    // A token we sent was rejected: the session is over. Clear it and return
+    // to sign-in once, instead of leaving a dead token to fail every later
+    // request. 403/404/5xx are left to the caller.
+    if (isSessionExpiredError(err) && token) {
+      endSession('expired')
+    }
+    throw err
+  }
 }
 
 export interface RegisterPayload {

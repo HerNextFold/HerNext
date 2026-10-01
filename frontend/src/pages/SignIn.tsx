@@ -1,14 +1,16 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { AlertTriangle, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
 import AuthLayout from '../components/auth/AuthLayout'
 import GoogleButton from '../components/auth/GoogleButton'
 import Button from '../components/Button'
 import { useUserContext, formatNameFromEmail } from '../context/UserContext'
 import { ApiError, loginUser } from '../lib/api'
+import { ACCESS_TOKEN_KEY, buildReturnUrl } from '../lib/session'
 
 export default function SignIn() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { updateUser } = useUserContext()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -17,6 +19,13 @@ export default function SignIn() {
   const [error, setError] = useState('')
   const [unverifiedEmail, setUnverifiedEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  /**
+   * `endSession()` sends the participant here with `?reason=session-expired`
+   * and the page they left, so say what happened instead of leaving them to
+   * wonder why the dashboard emptied out.
+   */
+  const sessionEnded = searchParams.get('reason') === 'session-expired'
 
   const handleGoogleAuth = () => {
     setError('Google sign-in is not configured yet. Please log in with your email and password.')
@@ -38,14 +47,15 @@ export default function SignIn() {
 
     try {
       const { user, accessToken } = await loginUser({ email: cleanEmail, password })
-      localStorage.setItem('accessToken', accessToken)
+      localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
       updateUser({
         email: user.email,
         fullName: `${user.firstName} ${user.lastName}`.trim() || formatNameFromEmail(user.email),
         country: user.country,
         state: user.state ?? '',
       })
-      navigate('/dashboard')
+      // Returns the participant to the page their session expired on.
+      navigate(buildReturnUrl(searchParams.get('next')))
     } catch (err) {
       if (err instanceof ApiError && err.code === 'ACCOUNT_UNVERIFIED') {
         setUnverifiedEmail(cleanEmail)
@@ -73,6 +83,16 @@ export default function SignIn() {
             Log in to continue building your career path with HerNext.
           </p>
         </div>
+
+        {sessionEnded && (
+          <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs leading-relaxed text-amber-900">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <span>
+              Your session ended after a period of inactivity, so we signed you out to protect
+              your data. Sign in again and you will be taken back to where you left off.
+            </span>
+          </div>
+        )}
 
         {/* Social Auth */}
         <GoogleButton

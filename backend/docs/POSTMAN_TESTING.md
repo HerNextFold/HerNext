@@ -105,7 +105,7 @@ Run folders in this order:
 Notes:
 
 - Folder 12 needs `npm run db:seed:demo:org` and re-authenticates because the
-  JWT default lifetime is 15 minutes.
+  JWT default lifetime is 3 days.
 - Folder 13 borrows the roadmap task already completed by the demo user.
 - `GET /careers/recommendations` runs **read-first**: until the demo user has
   persisted recommendations it computes them without writing, which is enough to
