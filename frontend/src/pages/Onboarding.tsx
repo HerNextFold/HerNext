@@ -1,6 +1,6 @@
-﻿import { useState, useMemo, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'motion/react'
+﻿import { useState, useMemo, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowRight,
   Briefcase,
@@ -16,10 +16,10 @@ import {
   Target,
   BrainCircuit,
   Award,
-} from 'lucide-react'
-import PurpleBackgroundDots from '../components/dashboard/PurpleBackgroundDots'
-import Button from '../components/Button'
-import { useUserContext, type OnboardingState } from '../context/UserContext'
+} from "lucide-react";
+import PurpleBackgroundDots from "../components/dashboard/PurpleBackgroundDots";
+import Button from "../components/Button";
+import { useUserContext, type OnboardingState } from "../context/UserContext";
 import {
   ApiError,
   completeOnboarding,
@@ -28,31 +28,33 @@ import {
   type CatalogueCareer,
   type CatalogueSkill,
   type EmploymentType,
-} from '../lib/api'
+} from "../lib/api";
 
 /**
  * Maps the Onboarding "work situation" button-group value to the backend's
  * employmentType enum. No exact match exists for every option, so the
  * closest reasonable enum value is used (see project decision).
  */
-function mapWorkSituationToEmploymentType(workSituation: string): EmploymentType {
+function mapWorkSituationToEmploymentType(
+  workSituation: string,
+): EmploymentType {
   switch (workSituation) {
-    case 'Full-time':
-      return 'EMPLOYED'
-    case 'Part-time':
-      return 'EMPLOYED'
-    case 'Freelance':
-      return 'FREELANCER'
-    case 'Self-employed':
-      return 'SELF_EMPLOYED'
-    case 'Student':
-      return 'STUDENT'
-    case 'Career break':
-      return 'UNEMPLOYED'
-    case 'Other / Transitional':
-      return 'UNEMPLOYED'
+    case "Full-time":
+      return "EMPLOYED";
+    case "Part-time":
+      return "EMPLOYED";
+    case "Freelance":
+      return "FREELANCER";
+    case "Self-employed":
+      return "SELF_EMPLOYED";
+    case "Student":
+      return "STUDENT";
+    case "Career break":
+      return "UNEMPLOYED";
+    case "Other / Transitional":
+      return "UNEMPLOYED";
     default:
-      return 'UNEMPLOYED'
+      return "UNEMPLOYED";
   }
 }
 
@@ -62,18 +64,18 @@ function mapWorkSituationToEmploymentType(workSituation: string): EmploymentType
  */
 function mapYearsExperienceToNumber(yearsExperience: string): number {
   switch (yearsExperience) {
-    case '0–1 years':
-      return 0
-    case '1–3 years':
-      return 2
-    case '3–5 years':
-      return 4
-    case '5–8 years':
-      return 6
-    case '8+ years':
-      return 8
+    case "0–1 years":
+      return 0;
+    case "1–3 years":
+      return 2;
+    case "3–5 years":
+      return 4;
+    case "5–8 years":
+      return 6;
+    case "8+ years":
+      return 8;
     default:
-      return 0
+      return 0;
   }
 }
 
@@ -83,226 +85,391 @@ function mapYearsExperienceToNumber(yearsExperience: string): number {
 // ... (ROLE_DATABASE kept intact)
 
 interface RolePreset {
-  title: string
-  category: 'Design' | 'Engineering' | 'Product' | 'Data & AI' | 'Strategy & Ops' | 'Marketing'
-  popularSkills: { name: string; type: 'Technical' | 'Business' | 'Creative' | 'People' | 'Tools' }[]
-  suggestedTargetRoles: string[]
-  guidancePrompts: { label: string; hint: string }[]
+  title: string;
+  category:
+    | "Design"
+    | "Engineering"
+    | "Product"
+    | "Data & AI"
+    | "Strategy & Ops"
+    | "Marketing";
+  popularSkills: {
+    name: string;
+    type: "Technical" | "Business" | "Creative" | "People" | "Tools";
+  }[];
+  suggestedTargetRoles: string[];
+  guidancePrompts: { label: string; hint: string }[];
 }
 
 const ROLE_DATABASE: Record<string, RolePreset> = {
-  'Mobile Developer': {
-    title: 'Mobile Developer',
-    category: 'Engineering',
+  "Mobile Developer": {
+    title: "Mobile Developer",
+    category: "Engineering",
     popularSkills: [
-      { name: 'React Native', type: 'Technical' },
-      { name: 'Flutter', type: 'Technical' },
-      { name: 'Swift', type: 'Technical' },
-      { name: 'Kotlin', type: 'Technical' },
-      { name: 'iOS Development', type: 'Technical' },
-      { name: 'Android Studio', type: 'Tools' },
-      { name: 'App Store CI/CD', type: 'Tools' },
-      { name: 'REST APIs', type: 'Technical' },
-      { name: 'Mobile UI/UX', type: 'Creative' },
-      { name: 'State Management (Redux/Zustand)', type: 'Technical' },
+      { name: "React Native", type: "Technical" },
+      { name: "Flutter", type: "Technical" },
+      { name: "Swift", type: "Technical" },
+      { name: "Kotlin", type: "Technical" },
+      { name: "iOS Development", type: "Technical" },
+      { name: "Android Studio", type: "Tools" },
+      { name: "App Store CI/CD", type: "Tools" },
+      { name: "REST APIs", type: "Technical" },
+      { name: "Mobile UI/UX", type: "Creative" },
+      { name: "State Management (Redux/Zustand)", type: "Technical" },
     ],
     suggestedTargetRoles: [
-      'Senior Mobile Engineer',
-      'Mobile Solutions Architect',
-      'Lead iOS/Android Engineer',
-      'AI Mobile Product Engineer',
+      "Senior Mobile Engineer",
+      "Mobile Solutions Architect",
+      "Lead iOS/Android Engineer",
+      "AI Mobile Product Engineer",
     ],
     guidancePrompts: [
-      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
-      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
-      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
-      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
+      {
+        label: "Responsibilities",
+        hint: "What were you personally responsible for?",
+      },
+      {
+        label: "Projects",
+        hint: "What did you build or work on, and for whom?",
+      },
+      {
+        label: "Problems Solved",
+        hint: "What went wrong, and what did you do about it?",
+      },
+      { label: "Tools & Methods", hint: "What did you use day to day?" },
     ],
   },
-  'Frontend Developer': {
-    title: 'Frontend Developer',
-    category: 'Engineering',
+  "Frontend Developer": {
+    title: "Frontend Developer",
+    category: "Engineering",
     popularSkills: [
-      { name: 'React', type: 'Technical' },
-      { name: 'TypeScript', type: 'Technical' },
-      { name: 'Next.js', type: 'Technical' },
-      { name: 'Tailwind CSS', type: 'Tools' },
-      { name: 'Web Performance', type: 'Technical' },
-      { name: 'State Management', type: 'Technical' },
-      { name: 'GraphQL', type: 'Technical' },
-      { name: 'AI SDKs (Vercel/OpenAI)', type: 'Tools' },
-      { name: 'Component Libraries (Storybook)', type: 'Tools' },
-      { name: 'Accessibility (a11y)', type: 'Technical' },
+      { name: "React", type: "Technical" },
+      { name: "TypeScript", type: "Technical" },
+      { name: "Next.js", type: "Technical" },
+      { name: "Tailwind CSS", type: "Tools" },
+      { name: "Web Performance", type: "Technical" },
+      { name: "State Management", type: "Technical" },
+      { name: "GraphQL", type: "Technical" },
+      { name: "AI SDKs (Vercel/OpenAI)", type: "Tools" },
+      { name: "Component Libraries (Storybook)", type: "Tools" },
+      { name: "Accessibility (a11y)", type: "Technical" },
     ],
     suggestedTargetRoles: [
-      'Senior Frontend Engineer',
-      'Full-Stack AI Developer',
-      'Design Systems Engineer',
-      'Frontend Architect',
+      "Senior Frontend Engineer",
+      "Full-Stack AI Developer",
+      "Design Systems Engineer",
+      "Frontend Architect",
     ],
     guidancePrompts: [
-      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
-      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
-      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
-      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
+      {
+        label: "Responsibilities",
+        hint: "What were you personally responsible for?",
+      },
+      {
+        label: "Projects",
+        hint: "What did you build or work on, and for whom?",
+      },
+      {
+        label: "Problems Solved",
+        hint: "What went wrong, and what did you do about it?",
+      },
+      { label: "Tools & Methods", hint: "What did you use day to day?" },
     ],
   },
-  'Backend Developer': {
-    title: 'Backend Developer',
-    category: 'Engineering',
+  "Backend Developer": {
+    title: "Backend Developer",
+    category: "Engineering",
     popularSkills: [
-      { name: 'Node.js', type: 'Technical' },
-      { name: 'Python', type: 'Technical' },
-      { name: 'Go', type: 'Technical' },
-      { name: 'PostgreSQL', type: 'Technical' },
-      { name: 'Docker & Kubernetes', type: 'Tools' },
-      { name: 'Microservices', type: 'Technical' },
-      { name: 'Redis', type: 'Technical' },
-      { name: 'API Security & OAuth', type: 'Technical' },
-      { name: 'AWS Cloud Services', type: 'Tools' },
+      { name: "Node.js", type: "Technical" },
+      { name: "Python", type: "Technical" },
+      { name: "Go", type: "Technical" },
+      { name: "PostgreSQL", type: "Technical" },
+      { name: "Docker & Kubernetes", type: "Tools" },
+      { name: "Microservices", type: "Technical" },
+      { name: "Redis", type: "Technical" },
+      { name: "API Security & OAuth", type: "Technical" },
+      { name: "AWS Cloud Services", type: "Tools" },
     ],
     suggestedTargetRoles: [
-      'Senior Backend Engineer',
-      'Distributed Systems Architect',
-      'Principal Cloud Backend Engineer',
-      'AI Platform Backend Engineer',
+      "Senior Backend Engineer",
+      "Distributed Systems Architect",
+      "Principal Cloud Backend Engineer",
+      "AI Platform Backend Engineer",
     ],
     guidancePrompts: [
-      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
-      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
-      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
-      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
+      {
+        label: "Responsibilities",
+        hint: "What were you personally responsible for?",
+      },
+      {
+        label: "Projects",
+        hint: "What did you build or work on, and for whom?",
+      },
+      {
+        label: "Problems Solved",
+        hint: "What went wrong, and what did you do about it?",
+      },
+      { label: "Tools & Methods", hint: "What did you use day to day?" },
     ],
   },
-  'UI/UX Designer': {
-    title: 'UI/UX Designer',
-    category: 'Design',
+  "UI/UX Designer": {
+    title: "UI/UX Designer",
+    category: "Design",
     popularSkills: [
-      { name: 'UI/UX Design', type: 'Creative' },
-      { name: 'Figma', type: 'Tools' },
-      { name: 'User Research', type: 'People' },
-      { name: 'Prototyping', type: 'Creative' },
-      { name: 'Design Systems', type: 'Creative' },
-      { name: 'Wireframing', type: 'Creative' },
-      { name: 'Usability Testing', type: 'People' },
-      { name: 'Interaction Design', type: 'Creative' },
-      { name: 'Information Architecture', type: 'Business' },
+      { name: "UI/UX Design", type: "Creative" },
+      { name: "Figma", type: "Tools" },
+      { name: "User Research", type: "People" },
+      { name: "Prototyping", type: "Creative" },
+      { name: "Design Systems", type: "Creative" },
+      { name: "Wireframing", type: "Creative" },
+      { name: "Usability Testing", type: "People" },
+      { name: "Interaction Design", type: "Creative" },
+      { name: "Information Architecture", type: "Business" },
     ],
     suggestedTargetRoles: [
-      'AI Product Designer',
-      'Senior UX Architect',
-      'Design Systems Lead',
-      'Head of Product Design',
+      "AI Product Designer",
+      "Senior UX Architect",
+      "Design Systems Lead",
+      "Head of Product Design",
     ],
     guidancePrompts: [
-      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
-      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
-      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
-      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
+      {
+        label: "Responsibilities",
+        hint: "What were you personally responsible for?",
+      },
+      {
+        label: "Projects",
+        hint: "What did you build or work on, and for whom?",
+      },
+      {
+        label: "Problems Solved",
+        hint: "What went wrong, and what did you do about it?",
+      },
+      { label: "Tools & Methods", hint: "What did you use day to day?" },
     ],
   },
-  'Product Manager': {
-    title: 'Product Manager',
-    category: 'Product',
+  "Product Manager": {
+    title: "Product Manager",
+    category: "Product",
     popularSkills: [
-      { name: 'Product Strategy', type: 'Business' },
-      { name: 'Roadmapping', type: 'Business' },
-      { name: 'User Stories & PRDs', type: 'Business' },
-      { name: 'Agile & Scrum', type: 'People' },
-      { name: 'A/B Testing', type: 'Technical' },
-      { name: 'Product Analytics (Mixpanel)', type: 'Tools' },
-      { name: 'Stakeholder Management', type: 'People' },
-      { name: 'Go-To-Market (GTM)', type: 'Business' },
+      { name: "Product Strategy", type: "Business" },
+      { name: "Roadmapping", type: "Business" },
+      { name: "User Stories & PRDs", type: "Business" },
+      { name: "Agile & Scrum", type: "People" },
+      { name: "A/B Testing", type: "Technical" },
+      { name: "Product Analytics (Mixpanel)", type: "Tools" },
+      { name: "Stakeholder Management", type: "People" },
+      { name: "Go-To-Market (GTM)", type: "Business" },
     ],
     suggestedTargetRoles: [
-      'Senior Product Manager',
-      'AI Product Lead',
-      'Director of Product',
-      'Group Product Manager',
+      "Senior Product Manager",
+      "AI Product Lead",
+      "Director of Product",
+      "Group Product Manager",
     ],
     guidancePrompts: [
-      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
-      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
-      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
-      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
+      {
+        label: "Responsibilities",
+        hint: "What were you personally responsible for?",
+      },
+      {
+        label: "Projects",
+        hint: "What did you build or work on, and for whom?",
+      },
+      {
+        label: "Problems Solved",
+        hint: "What went wrong, and what did you do about it?",
+      },
+      { label: "Tools & Methods", hint: "What did you use day to day?" },
     ],
   },
-  'Data Analyst': {
-    title: 'Data Analyst',
-    category: 'Data & AI',
+  "Data Analyst": {
+    title: "Data Analyst",
+    category: "Data & AI",
     popularSkills: [
-      { name: 'SQL', type: 'Technical' },
-      { name: 'Python (Pandas/NumPy)', type: 'Technical' },
-      { name: 'Tableau / Power BI', type: 'Tools' },
-      { name: 'Data Visualization', type: 'Creative' },
-      { name: 'A/B Test Analysis', type: 'Business' },
-      { name: 'Predictive Modeling', type: 'Technical' },
-      { name: 'Business Intelligence', type: 'Business' },
-      { name: 'dbt / Snowflake', type: 'Tools' },
+      { name: "SQL", type: "Technical" },
+      { name: "Python (Pandas/NumPy)", type: "Technical" },
+      { name: "Tableau / Power BI", type: "Tools" },
+      { name: "Data Visualization", type: "Creative" },
+      { name: "A/B Test Analysis", type: "Business" },
+      { name: "Predictive Modeling", type: "Technical" },
+      { name: "Business Intelligence", type: "Business" },
+      { name: "dbt / Snowflake", type: "Tools" },
     ],
     suggestedTargetRoles: [
-      'Senior Data Analyst',
-      'Lead Product Analyst',
-      'Data Science Manager',
-      'AI Data Strategist',
+      "Senior Data Analyst",
+      "Lead Product Analyst",
+      "Data Science Manager",
+      "AI Data Strategist",
     ],
     guidancePrompts: [
-      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
-      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
-      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
-      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
+      {
+        label: "Responsibilities",
+        hint: "What were you personally responsible for?",
+      },
+      {
+        label: "Projects",
+        hint: "What did you build or work on, and for whom?",
+      },
+      {
+        label: "Problems Solved",
+        hint: "What went wrong, and what did you do about it?",
+      },
+      { label: "Tools & Methods", hint: "What did you use day to day?" },
     ],
   },
-}
+};
 
 /**
  * Skill confidence, stored using the same vocabulary as the persisted
  * `SkillProficiency['level']` union so no value has to be invented or
  * translated on the way into the profile cache.
  */
-const CONFIDENCE_LEVELS: Array<{ value: OnboardingState['skills'][number]['level']; label: string }> = [
-  { value: 'Beginner', label: 'Beginner' },
-  { value: 'Intermediate', label: 'Comfortable' },
-  { value: 'Advanced', label: 'Advanced' },
+const CONFIDENCE_LEVELS: Array<{
+  value: OnboardingState["skills"][number]["level"];
+  label: string;
+}> = [
+  { value: "Beginner", label: "Beginner" },
+  { value: "Intermediate", label: "Comfortable" },
+  { value: "Advanced", label: "Advanced" },
 ];
 
 const DEFAULT_PRESET: RolePreset = {
-  title: 'Professional Specialist',
-  category: 'Strategy & Ops',
+  title: "Professional Specialist",
+  category: "Strategy & Ops",
   popularSkills: [
-    { name: 'Project Management', type: 'Business' },
-    { name: 'Problem Solving', type: 'People' },
-    { name: 'Communication', type: 'People' },
-    { name: 'Strategic Planning', type: 'Business' },
-    { name: 'Data Analysis', type: 'Technical' },
-    { name: 'Process Optimization', type: 'Business' },
-    { name: 'Cross-Functional Collaboration', type: 'People' },
-    { name: 'Leadership', type: 'People' },
+    { name: "Project Management", type: "Business" },
+    { name: "Problem Solving", type: "People" },
+    { name: "Communication", type: "People" },
+    { name: "Strategic Planning", type: "Business" },
+    { name: "Data Analysis", type: "Technical" },
+    { name: "Process Optimization", type: "Business" },
+    { name: "Cross-Functional Collaboration", type: "People" },
+    { name: "Leadership", type: "People" },
   ],
   suggestedTargetRoles: [
-    'Senior Operations Lead',
-    'Strategy & Growth Manager',
-    'Product Operations Specialist',
-    'AI Transformation Consultant',
+    "Senior Operations Lead",
+    "Strategy & Growth Manager",
+    "Product Operations Specialist",
+    "AI Transformation Consultant",
   ],
   guidancePrompts: [
-    { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
-    { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
-    { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
-    { label: 'Tools & Methods', hint: 'What did you use day to day?' },
+    {
+      label: "Responsibilities",
+      hint: "What were you personally responsible for?",
+    },
+    { label: "Projects", hint: "What did you build or work on, and for whom?" },
+    {
+      label: "Problems Solved",
+      hint: "What went wrong, and what did you do about it?",
+    },
+    { label: "Tools & Methods", hint: "What did you use day to day?" },
   ],
+};
+
+interface OnboardingDraft {
+  currentStep: number;
+  currentRole: string;
+  industry: string;
+  yearsExperience: string;
+  workSituation: string;
+  education: string;
+  selectedSkillIds: string[];
+  selectedCustomSkills: string[];
+  confidenceLevel: OnboardingState["skills"][number]["level"];
+  practicalExperience: string;
+  goalDirection: string;
+  nextChapterPriorities: string[];
+  targetCareerId: string;
+  targetRoleName: string;
+}
+
+const ONBOARDING_DRAFT_KEY = "hernext_onboarding_draft:";
+
+function onboardingDraftKey(email: string): string {
+  return `${ONBOARDING_DRAFT_KEY}${email.trim().toLowerCase()}`;
+}
+
+function loadOnboardingDraft(email: string): Partial<OnboardingDraft> {
+  if (!email) return {};
+  try {
+    const stored = localStorage.getItem(onboardingDraftKey(email));
+    if (!stored) return {};
+    const value: unknown = JSON.parse(stored);
+    if (typeof value !== "object" || value === null) return {};
+    const draft = value as Record<string, unknown>;
+    const result: Partial<OnboardingDraft> = {};
+    if (
+      typeof draft.currentStep === "number" &&
+      Number.isInteger(draft.currentStep) &&
+      draft.currentStep >= 1 &&
+      draft.currentStep <= 7
+    )
+      result.currentStep = draft.currentStep;
+    for (const key of [
+      "currentRole",
+      "industry",
+      "yearsExperience",
+      "workSituation",
+      "education",
+      "practicalExperience",
+      "goalDirection",
+      "targetCareerId",
+      "targetRoleName",
+    ] as const) {
+      if (typeof draft[key] === "string") result[key] = draft[key];
+    }
+    if (
+      Array.isArray(draft.selectedSkillIds) &&
+      draft.selectedSkillIds.every((item) => typeof item === "string")
+    )
+      result.selectedSkillIds = draft.selectedSkillIds;
+    if (
+      Array.isArray(draft.selectedCustomSkills) &&
+      draft.selectedCustomSkills.every((item) => typeof item === "string")
+    )
+      result.selectedCustomSkills = draft.selectedCustomSkills;
+    if (
+      Array.isArray(draft.nextChapterPriorities) &&
+      draft.nextChapterPriorities.every((item) => typeof item === "string")
+    )
+      result.nextChapterPriorities = draft.nextChapterPriorities;
+    if (
+      draft.confidenceLevel === "Beginner" ||
+      draft.confidenceLevel === "Intermediate" ||
+      draft.confidenceLevel === "Advanced" ||
+      draft.confidenceLevel === "Expert"
+    )
+      result.confidenceLevel = draft.confidenceLevel;
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function saveOnboardingDraft(email: string, draft: OnboardingDraft): void {
+  if (!email) return;
+  try {
+    localStorage.setItem(onboardingDraftKey(email), JSON.stringify(draft));
+  } catch {
+    // Storage can be unavailable; keep the in-memory onboarding flow usable.
+  }
 }
 
 export default function Onboarding() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
   const {
+    user,
     onboarding,
     updateOnboarding,
     setOnboardingCompleted,
     onboardingCompleted,
     setCareerProfile,
-  } = useUserContext()
-  const [currentStep, setCurrentStep] = useState<number>(1)
+  } = useUserContext();
+  const [draft] = useState(() => loadOnboardingDraft(user.email));
+  const [currentStep, setCurrentStep] = useState<number>(
+    draft.currentStep ?? 1,
+  );
 
   // Someone who has already completed onboarding should be editing their profile
   // in Settings, not replaying this flow: re-running it would overwrite real
@@ -312,7 +479,7 @@ export default function Onboarding() {
   // briefly bounce a completed participant to the dashboard.
   useEffect(() => {
     if (onboardingCompleted === true) {
-      navigate('/dashboard', { replace: true });
+      navigate("/dashboard", { replace: true });
     }
   }, [onboardingCompleted, navigate]);
 
@@ -324,11 +491,21 @@ export default function Onboarding() {
   // them, which fed the recommendation scorer phantom experience years. An
   // unknown value is represented as unselected and must be provided by the
   // participant; see validateOnboardingBeforeSubmit().
-  const [currentRole, setCurrentRole] = useState<string>(onboarding.currentRole)
-  const [industry, setIndustry] = useState<string>(onboarding.industry)
-  const [yearsExperience, setYearsExperience] = useState<string>(onboarding.yearsOfExperience)
-  const [workSituation, setWorkSituation] = useState<string>(onboarding.workSituation)
-  const [education, setEducation] = useState<string>(onboarding.education)
+  const [currentRole, setCurrentRole] = useState<string>(
+    draft.currentRole ?? onboarding.currentRole,
+  );
+  const [industry, setIndustry] = useState<string>(
+    draft.industry ?? onboarding.industry,
+  );
+  const [yearsExperience, setYearsExperience] = useState<string>(
+    draft.yearsExperience ?? onboarding.yearsOfExperience,
+  );
+  const [workSituation, setWorkSituation] = useState<string>(
+    draft.workSituation ?? onboarding.workSituation,
+  );
+  const [education, setEducation] = useState<string>(
+    draft.education ?? onboarding.education,
+  );
 
   // Step 3 Skills State
   //
@@ -340,22 +517,28 @@ export default function Onboarding() {
   // The catalogue is a set of SUGGESTIONS, not an allowlist. A participant who
   // holds a real skill that is not catalogued records it in
   // selectedCustomSkills, which the backend persists as a custom skill.
-  const [catalogueSkills, setCatalogueSkills] = useState<CatalogueSkill[]>([])
-  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [catalogueSkills, setCatalogueSkills] = useState<CatalogueSkill[]>([]);
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>(
+    draft.selectedSkillIds ?? [],
+  );
   /**
    * Skills the participant typed that are not in the approved catalogue. Kept as
    * plain names, not ids, because the backend creates the catalogue row for a
    * genuinely new name and reuses an existing one when the name matches.
    */
-  const [selectedCustomSkills, setSelectedCustomSkills] = useState<string[]>([])
-  const [skillSearchInput, setSkillSearchInput] = useState<string>('')
-  const [confidenceLevel, setConfidenceLevel] = useState<OnboardingState['skills'][number]['level']>('Intermediate')
-  const [catalogueLoading, setCatalogueLoading] = useState(true)
-  const [catalogueError, setCatalogueError] = useState('')
+  const [selectedCustomSkills, setSelectedCustomSkills] = useState<string[]>(
+    draft.selectedCustomSkills ?? [],
+  );
+  const [skillSearchInput, setSkillSearchInput] = useState<string>("");
+  const [confidenceLevel, setConfidenceLevel] = useState<
+    OnboardingState["skills"][number]["level"]
+  >(draft.confidenceLevel ?? "Intermediate");
+  const [catalogueLoading, setCatalogueLoading] = useState(true);
+  const [catalogueError, setCatalogueError] = useState("");
 
   const activeRolePreset = useMemo(() => {
-    return ROLE_DATABASE[currentRole] || DEFAULT_PRESET
-  }, [currentRole])
+    return ROLE_DATABASE[currentRole] || DEFAULT_PRESET;
+  }, [currentRole]);
 
   const selectedSkillNames = useMemo(
     () =>
@@ -363,28 +546,28 @@ export default function Onboarding() {
         .filter((skill) => selectedSkillIds.includes(skill.id))
         .map((skill) => skill.name),
     [catalogueSkills, selectedSkillIds],
-  )
+  );
 
   /** Lower-cased names of the picked catalogue skills, for duplicate checks. */
   const selectedCatalogueNames = useMemo(
     () => new Set(selectedSkillNames.map((name) => name.toLowerCase())),
     [selectedSkillNames],
-  )
+  );
 
   const skillSearchResults = useMemo(() => {
-    const query = skillSearchInput.trim().toLowerCase()
-    if (query === '') return []
+    const query = skillSearchInput.trim().toLowerCase();
+    if (query === "") return [];
     return catalogueSkills
       .filter((skill) => !selectedSkillIds.includes(skill.id))
       .filter((skill) => skill.name.toLowerCase().includes(query))
-      .slice(0, 8)
-  }, [catalogueSkills, selectedSkillIds, skillSearchInput])
+      .slice(0, 8);
+  }, [catalogueSkills, selectedSkillIds, skillSearchInput]);
 
   const addSkill = (skillId: string) => {
-    if (selectedSkillIds.includes(skillId)) return
-    setSelectedSkillIds((prev) => [...prev, skillId])
-    setSkillSearchInput('')
-  }
+    if (selectedSkillIds.includes(skillId)) return;
+    setSelectedSkillIds((prev) => [...prev, skillId]);
+    setSkillSearchInput("");
+  };
 
   /**
    * Adds a skill the participant typed that is not in the approved catalogue.
@@ -396,43 +579,45 @@ export default function Onboarding() {
    * other custom skills, so "React" and "react" can never both be added.
    */
   const addCustomSkill = () => {
-    const name = skillSearchInput.trim()
-    if (name === '') return
-    const key = name.toLowerCase()
+    const name = skillSearchInput.trim();
+    if (name === "") return;
+    const key = name.toLowerCase();
     const alreadyChosen =
       selectedCustomSkills.some((existing) => existing.toLowerCase() === key) ||
-      selectedCatalogueNames.has(key)
+      selectedCatalogueNames.has(key);
     if (alreadyChosen) {
-      setSkillSearchInput('')
-      return
+      setSkillSearchInput("");
+      return;
     }
-    setSelectedCustomSkills((prev) => [...prev, name])
-    setSkillSearchInput('')
-  }
+    setSelectedCustomSkills((prev) => [...prev, name]);
+    setSkillSearchInput("");
+  };
 
   const removeCustomSkill = (name: string) => {
-    setSelectedCustomSkills((prev) => prev.filter((entry) => entry !== name))
-  }
+    setSelectedCustomSkills((prev) => prev.filter((entry) => entry !== name));
+  };
 
   /** Adds the top suggestion, or the typed text when nothing matches. */
   const addSkillFromInput = () => {
     if (skillSearchResults.length > 0) {
-      addSkill(skillSearchResults[0].id)
-      return
+      addSkill(skillSearchResults[0].id);
+      return;
     }
-    addCustomSkill()
-  }
+    addCustomSkill();
+  };
 
   const removeSkill = (skillId: string) => {
-    setSelectedSkillIds((prev) => prev.filter((id) => id !== skillId))
-  }
+    setSelectedSkillIds((prev) => prev.filter((id) => id !== skillId));
+  };
 
   const handleRoleSelect = (roleName: string) => {
-    setCurrentRole(roleName)
-  }
+    setCurrentRole(roleName);
+  };
 
   // Step 4 Experience State
-  const [practicalExperience, setPracticalExperience] = useState<string>('')
+  const [practicalExperience, setPracticalExperience] = useState<string>(
+    draft.practicalExperience ?? "",
+  );
 
   /**
    * Adds a blank heading for the participant to write under.
@@ -448,8 +633,10 @@ export default function Onboarding() {
    * blank prompt is recoverable; invented history is not.
    */
   const handleInsertGuidance = (label: string) => {
-    setPracticalExperience((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${label}:\n` : `${label}:\n`))
-  }
+    setPracticalExperience((prev) =>
+      prev.trim() ? `${prev.trimEnd()}\n\n${label}:\n` : `${label}:\n`,
+    );
+  };
 
   // Step 5 Goals State
   //
@@ -459,82 +646,145 @@ export default function Onboarding() {
   // expressed - and `careerInterests` is persisted from them, so the fabricated
   // goals reached the database. Nothing about a person's goals is known until
   // they say so.
-  const [goalDirection, setGoalDirection] = useState<string>('')
-  const [nextChapterPriorities, setNextChapterPriorities] = useState<string[]>([])
+  const [goalDirection, setGoalDirection] = useState<string>(
+    draft.goalDirection ?? "",
+  );
+  const [nextChapterPriorities, setNextChapterPriorities] = useState<string[]>(
+    draft.nextChapterPriorities ?? [],
+  );
+  const [catalogueCareers, setCatalogueCareers] = useState<CatalogueCareer[]>(
+    [],
+  );
+  const [targetCareerId, setTargetCareerId] = useState<string>(
+    draft.targetCareerId ?? "",
+  );
+  const [targetRoleName, setTargetRoleName] = useState<string>(
+    draft.targetRoleName ?? onboarding.targetRole,
+  );
 
-  // The target career must be an approved catalogue entry so it can be stored
-  // as a real targetCareerId. Free text is not accepted, and no career is
-  // pre-selected on the participant's behalf.
-  const [catalogueCareers, setCatalogueCareers] = useState<CatalogueCareer[]>([])
-  const [targetCareerId, setTargetCareerId] = useState<string>('')
-  const [targetRoleName, setTargetRoleName] = useState<string>(onboarding.targetRole)
-
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     async function loadCatalogue() {
       try {
         const [skills, careers] = await Promise.all([
           listCatalogueSkills(),
           listCatalogueCareers(),
-        ])
-        if (cancelled) return
-        setCatalogueSkills(skills)
-        setCatalogueCareers(careers)
-        setCatalogueError('')
+        ]);
+        if (cancelled) return;
+        setCatalogueSkills(skills);
+        setCatalogueCareers(careers);
+        setCatalogueError("");
       } catch (err) {
-        if (cancelled) return
-        // A catalogue failure must be surfaced, never silently worked around
-        // with placeholder skills or a default career.
+        if (cancelled) return;
         setCatalogueError(
           err instanceof ApiError
             ? err.message
-            : 'Could not load the approved skills and careers catalogue.',
-        )
+            : "Could not load the approved skills and careers catalogue.",
+        );
       } finally {
-        if (!cancelled) setCatalogueLoading(false)
+        if (!cancelled) setCatalogueLoading(false);
       }
     }
-    void loadCatalogue()
+    void loadCatalogue();
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
-  /**
-   * Rejects an incomplete submission in the browser so the participant gets a
-   * precise message, without inventing substitute values. The backend remains
-   * the authority and re-validates everything.
-   */
   const validateOnboardingBeforeSubmit = (): string | null => {
-    if (currentRole.trim() === '') return 'Please tell us your current role.'
-    if (industry.trim() === '') return 'Please choose the industry you work in.'
-    if (yearsExperience.trim() === '') return 'Please choose your years of work experience.'
-    if (workSituation.trim() === '') return 'Please choose your current work situation.'
-    if (goalDirection.trim() === '') return 'Please choose which direction you are heading in.'
-    if (targetCareerId === '') return 'Please choose a target career from the approved catalogue.'
-    return null
-  }
+    if (currentRole.trim() === "") return "Please tell us your current role.";
+    if (industry.trim() === "")
+      return "Please choose the industry you work in.";
+    if (yearsExperience.trim() === "")
+      return "Please choose your years of work experience.";
+    if (workSituation.trim() === "")
+      return "Please choose your current work situation.";
+    if (goalDirection.trim() === "")
+      return "Please choose which direction you are heading in.";
+    if (targetCareerId === "")
+      return "Please choose a target career from the approved catalogue.";
+    return null;
+  };
+
+  useEffect(() => {
+    if (isCompleted) return;
+    saveOnboardingDraft(user.email, {
+      currentStep,
+      currentRole,
+      industry,
+      yearsExperience,
+      workSituation,
+      education,
+      selectedSkillIds,
+      selectedCustomSkills,
+      confidenceLevel,
+      practicalExperience,
+      goalDirection,
+      nextChapterPriorities,
+      targetCareerId,
+      targetRoleName,
+    });
+  }, [
+    user.email,
+    isCompleted,
+    currentStep,
+    currentRole,
+    industry,
+    yearsExperience,
+    workSituation,
+    education,
+    selectedSkillIds,
+    selectedCustomSkills,
+    confidenceLevel,
+    practicalExperience,
+    goalDirection,
+    nextChapterPriorities,
+    targetCareerId,
+    targetRoleName,
+  ]);
+
+  const handleSaveAndExit = () => {
+    saveOnboardingDraft(user.email, {
+      currentStep,
+      currentRole,
+      industry,
+      yearsExperience,
+      workSituation,
+      education,
+      selectedSkillIds,
+      selectedCustomSkills,
+      confidenceLevel,
+      practicalExperience,
+      goalDirection,
+      nextChapterPriorities,
+      targetCareerId,
+      targetRoleName,
+    });
+    navigate("/");
+  };
 
   const handleFinishOnboarding = async () => {
-    if (isSubmitting) return
-    setSubmitError('')
+    if (isSubmitting) return;
+    setSubmitError("");
 
-    const validationError = validateOnboardingBeforeSubmit()
+    const validationError = validateOnboardingBeforeSubmit();
     if (validationError !== null) {
-      setSubmitError(validationError)
-      return
+      setSubmitError(validationError);
+      return;
     }
 
+    setIsSubmitting(true);
 
-    setIsSubmitting(true)
-
-    const employmentType = mapWorkSituationToEmploymentType(workSituation)
-    const yearsOfExperience = mapYearsExperienceToNumber(yearsExperience)
-    const trimmedExperience = practicalExperience.trim()
-    const targetCareer = catalogueCareers.find((career) => career.id === targetCareerId)
+    const employmentType = mapWorkSituationToEmploymentType(workSituation);
+    const yearsOfExperience = mapYearsExperienceToNumber(yearsExperience);
+    const trimmedExperience = practicalExperience.trim();
+    const targetCareer = catalogueCareers.find(
+      (career) => career.id === targetCareerId,
+    );
 
     try {
       // ONE atomic backend call. The profile, skills, target career, the
@@ -553,7 +803,7 @@ export default function Onboarding() {
         industry: industry.trim(),
         yearsOfExperience,
         employmentType,
-        education: education.trim() === '' ? null : education.trim(),
+        education: education.trim() === "" ? null : education.trim(),
         careerInterests: nextChapterPriorities,
         targetCareerId,
         skillIds: selectedSkillIds,
@@ -563,20 +813,15 @@ export default function Onboarding() {
         // Only record an experience when the participant actually described
         // one. Otherwise nothing is stored - no placeholder job history.
         experience:
-          trimmedExperience === ''
+          trimmedExperience === ""
             ? null
             : {
                 title: currentRole.trim(),
                 description: trimmedExperience,
                 employmentType,
               },
-      })
-      setCareerProfile(savedProfile)
-
-
-      // The local onboarding cache mirrors what the server just committed. It
-      // is a display cache only; the server remains the source of truth for
-      // completion.
+      });
+      setCareerProfile(savedProfile);
       updateOnboarding({
         currentRole: currentRole.trim(),
         yearsOfExperience: yearsExperience,
@@ -584,118 +829,125 @@ export default function Onboarding() {
         industry: industry.trim(),
         education,
         skills: selectedSkillIds.map((id) => {
-          // Read the real catalogue entry rather than inventing a level or a
-          // category. `confidenceLevel` is what the participant actually chose,
-          // and the category comes from the approved catalogue record.
-          const entry = catalogueSkills.find((s) => s.id === id);
+          const entry = catalogueSkills.find((skill) => skill.id === id);
           return {
-            name: entry?.name ?? '',
+            name: entry?.name ?? "",
             level: confidenceLevel,
-            category: entry?.category ?? '',
+            category: entry?.category ?? "",
           };
         }),
-        goalType: goalDirection.toLowerCase().includes('new role') ? 'Transition' : 'Growth',
+        goalType: goalDirection.toLowerCase().includes("new role")
+          ? "Transition"
+          : "Growth",
         targetRole: targetCareer?.name ?? targetRoleName,
-        aiAnalysis: '',
+        aiAnalysis: "",
         isOnboarded: true,
-      })
-      setOnboardingCompleted(true)
+      });
+      setOnboardingCompleted(true);
+      setIsCompleted(true);
+      try {
+        localStorage.removeItem(onboardingDraftKey(user.email));
+      } catch {
+        // Completion must not depend on browser storage being available.
+      }
 
-      navigate('/dashboard')
+      navigate("/dashboard");
     } catch (err) {
       // The backend's `error.details` carries the specific rejected field; its
       // `message` is only the generic "Invalid request data". Showing the detail
       // tells the participant what to actually fix.
       if (err instanceof ApiError) {
-        setSubmitError(err.firstDetailMessage ?? err.message)
+        setSubmitError(err.firstDetailMessage ?? err.message);
       } else {
-        setSubmitError('Something went wrong. Please try again.')
+        setSubmitError("Something went wrong. Please try again.");
       }
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   // Step 7 Analysis Radar Orbit State
-  const [analysisProgress, setAnalysisProgress] = useState<number>(12)
-  const [analysisPhase, setAnalysisPhase] = useState<string>('Understanding your experience...')
-  const [isAnalysisComplete, setIsAnalysisComplete] = useState<boolean>(false)
+  const [analysisProgress, setAnalysisProgress] = useState<number>(12);
+  const [analysisPhase, setAnalysisPhase] = useState<string>(
+    "Understanding your experience...",
+  );
+  const [isAnalysisComplete, setIsAnalysisComplete] = useState<boolean>(false);
 
   // Radar orbital node animation tick
-  const [orbitAngle, setOrbitAngle] = useState<number>(0)
+  const [orbitAngle, setOrbitAngle] = useState<number>(0);
 
   useEffect(() => {
     if (currentStep === 7) {
       const interval = setInterval(() => {
-        setOrbitAngle((prev) => (prev + 3) % 360)
-      }, 50)
-      return () => clearInterval(interval)
+        setOrbitAngle((prev) => (prev + 3) % 360);
+      }, 50);
+      return () => clearInterval(interval);
     }
-  }, [currentStep])
+  }, [currentStep]);
 
   useEffect(() => {
     if (currentStep === 7) {
-      setIsAnalysisComplete(false)
-      setAnalysisProgress(15)
-      setAnalysisPhase('Understanding your experience...')
+      setIsAnalysisComplete(false);
+      setAnalysisProgress(15);
+      setAnalysisPhase("Understanding your experience...");
 
       const t1 = setTimeout(() => {
-        setAnalysisProgress(42)
-        setAnalysisPhase('Mapping your skills & competencies...')
-      }, 1000)
+        setAnalysisProgress(42);
+        setAnalysisPhase("Mapping your skills & competencies...");
+      }, 1000);
 
       const t2 = setTimeout(() => {
-        setAnalysisProgress(74)
-        setAnalysisPhase('Assessing AI readiness & market impact...')
-      }, 2200)
+        setAnalysisProgress(74);
+        setAnalysisPhase("Assessing AI readiness & market impact...");
+      }, 2200);
 
       const t3 = setTimeout(() => {
-        setAnalysisProgress(88)
-        setAnalysisPhase('Harmonizing career trajectory...')
-      }, 3400)
+        setAnalysisProgress(88);
+        setAnalysisPhase("Harmonizing career trajectory...");
+      }, 3400);
 
       const t4 = setTimeout(() => {
-        setAnalysisProgress(100)
-        setAnalysisPhase('Executive career passport ready!')
-        setIsAnalysisComplete(true)
-      }, 4500)
+        setAnalysisProgress(100);
+        setAnalysisPhase("Executive career passport ready!");
+        setIsAnalysisComplete(true);
+      }, 4500);
 
       return () => {
-        clearTimeout(t1)
-        clearTimeout(t2)
-        clearTimeout(t3)
-        clearTimeout(t4)
-      }
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
+      };
     }
-  }, [currentStep])
+  }, [currentStep]);
 
   const handleNextStep = () => {
     if (currentStep < 7) {
-      setCurrentStep((prev) => prev + 1)
+      setCurrentStep((prev) => prev + 1);
     }
-  }
+  };
 
   const handlePrevStep = () => {
     if (currentStep > 1 && currentStep !== 7) {
-      setCurrentStep((prev) => prev - 1)
+      setCurrentStep((prev) => prev - 1);
     }
-  }
+  };
 
   const ROLE_SUGGESTIONS_LIST = [
-    'Mobile Developer',
-    'Frontend Developer',
-    'Backend Developer',
-    'UI/UX Designer',
-    'Product Manager',
-    'Data Analyst',
-    'AI Engineer',
-    'Full Stack Engineer',
-    'Graphic Designer',
-    'Brand Strategist',
-    'DevOps Engineer',
-    'Accountant',
-    'Virtual Assistant',
-    'Project Manager',
-  ]
+    "Mobile Developer",
+    "Frontend Developer",
+    "Backend Developer",
+    "UI/UX Designer",
+    "Product Manager",
+    "Data Analyst",
+    "AI Engineer",
+    "Full Stack Engineer",
+    "Graphic Designer",
+    "Brand Strategist",
+    "DevOps Engineer",
+    "Accountant",
+    "Virtual Assistant",
+    "Project Manager",
+  ];
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 font-sans text-ink">
@@ -743,21 +995,24 @@ export default function Onboarding() {
             </span>
 
             <h1 className="font-display text-2xl font-semibold leading-tight text-white lg:text-3xl xl:text-4xl">
-              {currentStep === 1 && 'Your experience can take you further.'}
-              {currentStep === 2 && (currentRole.trim() ? 'Your current role' : 'Tell us about your current role')}
-              {currentStep === 3 && 'Mapping your transferable skills.'}
-              {currentStep === 4 && 'Synthesizing your practical work.'}
-              {currentStep === 5 && 'Designing your ideal career target.'}
+              {currentStep === 1 && "Your experience can take you further."}
+              {currentStep === 2 &&
+                (currentRole.trim()
+                  ? "Your current role"
+                  : "Tell us about your current role")}
+              {currentStep === 3 && "Mapping your transferable skills."}
+              {currentStep === 4 && "Synthesizing your practical work."}
+              {currentStep === 5 && "Designing your ideal career target."}
               {currentStep === 6 && "You're almost ready to begin."}
-              {currentStep === 7 && 'Your career story is coming together.'}
+              {currentStep === 7 && "Your career story is coming together."}
             </h1>
 
             <p className="text-xs leading-relaxed text-white/80 sm:text-sm">
               {currentStep === 6
-                ? 'Review your information, then let HerNext uncover your next career move.'
+                ? "Review your information, then let HerNext uncover your next career move."
                 : currentStep === 7
                   ? "We're turning your experience into your next career direction."
-                  : 'Discover where your skills, experience, and ambitions can take you next.'}
+                  : "Discover where your skills, experience, and ambitions can take you next."}
             </p>
 
             {currentRole.trim() && (
@@ -787,13 +1042,13 @@ export default function Onboarding() {
                 Step {currentStep} of 7
               </span>
               <span className="font-display text-sm font-bold text-ink hidden sm:block">
-                {currentStep === 1 && 'Welcome'}
-                {currentStep === 2 && 'Career Right Now'}
-                {currentStep === 3 && 'Your Skills'}
-                {currentStep === 4 && 'Your Experience'}
-                {currentStep === 5 && 'Your Goals'}
-                {currentStep === 6 && 'Review & Confirmation'}
-                {currentStep === 7 && 'AI Career Analysis'}
+                {currentStep === 1 && "Welcome"}
+                {currentStep === 2 && "Career Right Now"}
+                {currentStep === 3 && "Your Skills"}
+                {currentStep === 4 && "Your Experience"}
+                {currentStep === 5 && "Your Goals"}
+                {currentStep === 6 && "Review & Confirmation"}
+                {currentStep === 7 && "AI Career Analysis"}
               </span>
             </div>
           </div>
@@ -805,21 +1060,22 @@ export default function Onboarding() {
                 key={num}
                 className={`h-2 rounded-full transition-all duration-300 ${
                   num === currentStep
-                    ? 'w-8 bg-plum-800'
+                    ? "w-8 bg-plum-800"
                     : num < currentStep
-                      ? 'w-4 bg-plum-300'
-                      : 'w-4 bg-slate-200'
+                      ? "w-4 bg-plum-300"
+                      : "w-4 bg-slate-200"
                 }`}
               />
             ))}
           </div>
 
-          <Link
-            to="/dashboard"
+          <button
+            type="button"
+            onClick={handleSaveAndExit}
             className="text-xs font-semibold text-body transition-colors hover:text-ink"
           >
             Save & Exit
-          </Link>
+          </button>
         </header>
 
         {/* STEP CONTENT BODY */}
@@ -842,7 +1098,9 @@ export default function Onboarding() {
                     Welcome to HerNext
                   </h2>
                   <p className="mt-2 text-sm leading-relaxed text-body sm:text-base">
-                    Let&apos;s map where you are and where you want to go next. In the next few steps, tell us about your career, skills, experience, and goals.
+                    Let&apos;s map where you are and where you want to go next.
+                    In the next few steps, tell us about your career, skills,
+                    experience, and goals.
                   </p>
                 </div>
 
@@ -857,8 +1115,12 @@ export default function Onboarding() {
                           01
                         </span>
                         <div>
-                          <h4 className="font-display text-sm font-semibold text-ink">Your career</h4>
-                          <p className="text-xs text-body">Tell us where you are today.</p>
+                          <h4 className="font-display text-sm font-semibold text-ink">
+                            Your career
+                          </h4>
+                          <p className="text-xs text-body">
+                            Tell us where you are today.
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -869,8 +1131,12 @@ export default function Onboarding() {
                           02
                         </span>
                         <div>
-                          <h4 className="font-display text-sm font-semibold text-ink">Your skills</h4>
-                          <p className="text-xs text-body">Show us what you already know.</p>
+                          <h4 className="font-display text-sm font-semibold text-ink">
+                            Your skills
+                          </h4>
+                          <p className="text-xs text-body">
+                            Show us what you already know.
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -881,8 +1147,12 @@ export default function Onboarding() {
                           03
                         </span>
                         <div>
-                          <h4 className="font-display text-sm font-semibold text-ink">Your experience</h4>
-                          <p className="text-xs text-body">Tell us about the work you&apos;ve done.</p>
+                          <h4 className="font-display text-sm font-semibold text-ink">
+                            Your experience
+                          </h4>
+                          <p className="text-xs text-body">
+                            Tell us about the work you&apos;ve done.
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -893,8 +1163,12 @@ export default function Onboarding() {
                           04
                         </span>
                         <div>
-                          <h4 className="font-display text-sm font-semibold text-ink">Your direction</h4>
-                          <p className="text-xs text-body">Tell us where you&apos;d like to go.</p>
+                          <h4 className="font-display text-sm font-semibold text-ink">
+                            Your direction
+                          </h4>
+                          <p className="text-xs text-body">
+                            Tell us where you&apos;d like to go.
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -904,14 +1178,17 @@ export default function Onboarding() {
                 <div className="flex items-center gap-3 rounded-xl border border-peach-200 bg-peach-50/70 p-4 text-xs text-plum-950">
                   <Clock size={18} className="shrink-0 text-plum-700" />
                   <span>
-                    <strong>Takes about 5â€“7 minutes.</strong> You can save your progress and come back at any time.
+                    <strong>Takes about 5â€“7 minutes.</strong> You can save
+                    your progress and come back at any time.
                   </span>
                 </div>
 
                 <div className="flex items-center gap-3 rounded-xl border border-hairline bg-slate-50 p-4 text-xs text-body">
                   <Lock size={18} className="shrink-0 text-plum-800" />
                   <span>
-                    <strong>Your information is private & protected.</strong> Your answers are strictly used to personalize your HerNext experience.
+                    <strong>Your information is private & protected.</strong>{" "}
+                    Your answers are strictly used to personalize your HerNext
+                    experience.
                   </span>
                 </div>
 
@@ -960,7 +1237,7 @@ export default function Onboarding() {
                         type="text"
                         value={currentRole}
                         onChange={(e) => {
-                          setCurrentRole(e.target.value)
+                          setCurrentRole(e.target.value);
                         }}
                         placeholder="Search or enter your role e.g. Mobile Developer, Product Manager..."
                         className="w-full rounded-xl border border-hairline bg-slate-50/50 py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-plum-600 focus:bg-white focus:ring-2 focus:ring-plum-500/20"
@@ -979,8 +1256,8 @@ export default function Onboarding() {
                           onClick={() => handleRoleSelect(roleName)}
                           className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
                             currentRole === roleName
-                              ? 'bg-plum-900 text-white shadow-xs'
-                              : 'bg-slate-100 text-body hover:bg-plum-100 hover:text-plum-900'
+                              ? "bg-plum-900 text-white shadow-xs"
+                              : "bg-slate-100 text-body hover:bg-plum-100 hover:text-plum-900"
                           }`}
                         >
                           {roleName}
@@ -1040,13 +1317,13 @@ export default function Onboarding() {
                     </label>
                     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                       {[
-                        'Full-time',
-                        'Part-time',
-                        'Freelance',
-                        'Self-employed',
-                        'Career break',
-                        'Student',
-                        'Other / Transitional',
+                        "Full-time",
+                        "Part-time",
+                        "Freelance",
+                        "Self-employed",
+                        "Career break",
+                        "Student",
+                        "Other / Transitional",
                       ].map((sit) => (
                         <button
                           key={sit}
@@ -1054,8 +1331,8 @@ export default function Onboarding() {
                           onClick={() => setWorkSituation(sit)}
                           className={`rounded-xl border p-3 text-center text-xs font-medium transition-all ${
                             workSituation === sit
-                              ? 'border-plum-600 bg-plum-50 text-plum-950 font-bold shadow-xs'
-                              : 'border-hairline bg-white text-body hover:border-plum-200'
+                              ? "border-plum-600 bg-plum-50 text-plum-950 font-bold shadow-xs"
+                              : "border-hairline bg-white text-body hover:border-plum-200"
                           }`}
                         >
                           {sit}
@@ -1083,10 +1360,18 @@ export default function Onboarding() {
                 </div>
 
                 <div className="flex items-center justify-between pt-4">
-                  <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevStep}
+                    className="px-6 py-2.5 text-xs font-semibold"
+                  >
                     â† Back
                   </Button>
-                  <Button variant="primary" onClick={handleNextStep} className="px-6 py-2.5 text-xs font-semibold">
+                  <Button
+                    variant="primary"
+                    onClick={handleNextStep}
+                    className="px-6 py-2.5 text-xs font-semibold"
+                  >
                     Continue to Skills â†’
                   </Button>
                 </div>
@@ -1110,8 +1395,11 @@ export default function Onboarding() {
                     Your Skills
                   </h2>
                   <p className="mt-1.5 text-sm text-body">
-                    What can you already do? Showing suggestions tailored for{' '}
-                    <strong className="font-semibold text-plum-900">{currentRole}</strong>.
+                    What can you already do? Showing suggestions tailored for{" "}
+                    <strong className="font-semibold text-plum-900">
+                      {currentRole}
+                    </strong>
+                    .
                   </p>
                 </div>
 
@@ -1127,9 +1415,9 @@ export default function Onboarding() {
                         value={skillSearchInput}
                         onChange={(e) => setSkillSearchInput(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            addSkillFromInput()
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addSkillFromInput();
                           }
                         }}
                         placeholder="Search skills, or type your own and press Enter"
@@ -1138,7 +1426,7 @@ export default function Onboarding() {
                     </div>
                     <Button
                       variant="primary"
-                      disabled={skillSearchInput.trim() === ''}
+                      disabled={skillSearchInput.trim() === ""}
                       onClick={addSkillFromInput}
                       className="px-4 py-2.5 text-xs font-semibold shrink-0"
                     >
@@ -1146,13 +1434,16 @@ export default function Onboarding() {
                     </Button>
                   </div>
 
-                  {catalogueError !== '' && (
-                    <p role="alert" className="mt-2 text-xs font-semibold text-rose-700">
+                  {catalogueError !== "" && (
+                    <p
+                      role="alert"
+                      className="mt-2 text-xs font-semibold text-rose-700"
+                    >
                       {catalogueError}
                     </p>
                   )}
 
-                  {!catalogueError && skillSearchInput.trim() !== '' && (
+                  {!catalogueError && skillSearchInput.trim() !== "" && (
                     <div className="mt-2 rounded-xl border border-hairline bg-white p-1.5 shadow-xs">
                       {skillSearchResults.length === 0 ? (
                         <button
@@ -1162,11 +1453,12 @@ export default function Onboarding() {
                         >
                           <span className="min-w-0">
                             <span className="block text-xs font-medium text-ink truncate">
-                              Add &ldquo;{skillSearchInput.trim()}&rdquo; as your own skill
+                              Add &ldquo;{skillSearchInput.trim()}&rdquo; as
+                              your own skill
                             </span>
                             <span className="block text-[11px] text-body/70">
-                              Not in the suggestions? Add it anyway &mdash; we keep it on your
-                              profile.
+                              Not in the suggestions? Add it anyway &mdash; we
+                              keep it on your profile.
                             </span>
                           </span>
                           <Plus size={14} className="shrink-0 text-plum-700" />
@@ -1181,7 +1473,7 @@ export default function Onboarding() {
                           >
                             <span>{skill.name}</span>
                             <span className="text-[10px] uppercase tracking-wide text-body/60">
-                              {skill.category.replace(/_/g, ' ')}
+                              {skill.category.replace(/_/g, " ")}
                             </span>
                           </button>
                         ))
@@ -1193,14 +1485,16 @@ export default function Onboarding() {
                 <div className="rounded-2xl border border-hairline bg-slate-50/60 p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-ink">
-                      Your Selected Skills ({selectedSkillIds.length + selectedCustomSkills.length})
+                      Your Selected Skills (
+                      {selectedSkillIds.length + selectedCustomSkills.length})
                     </span>
-                    {(selectedSkillIds.length > 0 || selectedCustomSkills.length > 0) && (
+                    {(selectedSkillIds.length > 0 ||
+                      selectedCustomSkills.length > 0) && (
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedSkillIds([])
-                          setSelectedCustomSkills([])
+                          setSelectedSkillIds([]);
+                          setSelectedCustomSkills([]);
                         }}
                         className="text-[11px] text-rose-600 hover:underline"
                       >
@@ -1208,12 +1502,14 @@ export default function Onboarding() {
                       </button>
                     )}
                   </div>
-                  {selectedSkillIds.length === 0 && selectedCustomSkills.length === 0 && (
-                    <p className="pt-1 text-xs text-body/70">
-                      No skills selected yet. Add the skills you genuinely have - nothing is selected
-                      for you. Suggestions are a starting point, not a limit.
-                    </p>
-                  )}
+                  {selectedSkillIds.length === 0 &&
+                    selectedCustomSkills.length === 0 && (
+                      <p className="pt-1 text-xs text-body/70">
+                        No skills selected yet. Add the skills you genuinely
+                        have - nothing is selected for you. Suggestions are a
+                        starting point, not a limit.
+                      </p>
+                    )}
                   <div className="flex flex-wrap gap-2 pt-1">
                     {selectedSkillNames.map((skill) => (
                       <span
@@ -1226,7 +1522,9 @@ export default function Onboarding() {
                           aria-label={`Remove ${skill}`}
                           onClick={() =>
                             removeSkill(
-                              catalogueSkills.find((item) => item.name === skill)?.id ?? '',
+                              catalogueSkills.find(
+                                (item) => item.name === skill,
+                              )?.id ?? "",
                             )
                           }
                           className="rounded-full p-0.5 hover:bg-plum-200 text-plum-800"
@@ -1260,27 +1558,35 @@ export default function Onboarding() {
                 <div className="space-y-3">
                   <span className="text-xs font-bold uppercase tracking-wider text-ink/80">
                     {catalogueLoading
-                      ? 'Loading the approved skills catalogue...'
+                      ? "Loading the approved skills catalogue..."
                       : `Browse the approved catalogue (${catalogueSkills.length} skills)`}
                   </span>
                   <div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto">
                     {catalogueSkills.map((item) => {
-                      const isSelected = selectedSkillIds.includes(item.id)
+                      const isSelected = selectedSkillIds.includes(item.id);
                       return (
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => (isSelected ? removeSkill(item.id) : addSkill(item.id))}
+                          onClick={() =>
+                            isSelected
+                              ? removeSkill(item.id)
+                              : addSkill(item.id)
+                          }
                           className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                             isSelected
-                              ? 'border-plum-700 bg-plum-900 text-white shadow-xs'
-                              : 'border-hairline bg-white text-body hover:border-plum-300 hover:text-plum-900'
+                              ? "border-plum-700 bg-plum-900 text-white shadow-xs"
+                              : "border-hairline bg-white text-body hover:border-plum-300 hover:text-plum-900"
                           }`}
                         >
-                          {isSelected ? <Check size={12} /> : <Plus size={12} />}
+                          {isSelected ? (
+                            <Check size={12} />
+                          ) : (
+                            <Plus size={12} />
+                          )}
                           {item.name}
                         </button>
-                      )
+                      );
                     })}
                   </div>
                 </div>
@@ -1297,8 +1603,8 @@ export default function Onboarding() {
                         onClick={() => setConfidenceLevel(lvl.value)}
                         className={`rounded-xl border py-2 text-center text-xs font-semibold transition-all ${
                           confidenceLevel === lvl.value
-                            ? 'border-plum-600 bg-plum-900 text-white'
-                            : 'border-hairline bg-slate-50 text-body hover:bg-slate-100'
+                            ? "border-plum-600 bg-plum-900 text-white"
+                            : "border-hairline bg-slate-50 text-body hover:bg-slate-100"
                         }`}
                       >
                         {lvl.label}
@@ -1308,10 +1614,18 @@ export default function Onboarding() {
                 </div>
 
                 <div className="flex items-center justify-between pt-4">
-                  <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevStep}
+                    className="px-6 py-2.5 text-xs font-semibold"
+                  >
                     â† Back
                   </Button>
-                  <Button variant="primary" onClick={handleNextStep} className="px-6 py-2.5 text-xs font-semibold">
+                  <Button
+                    variant="primary"
+                    onClick={handleNextStep}
+                    className="px-6 py-2.5 text-xs font-semibold"
+                  >
                     Continue to Experience â†’
                   </Button>
                 </div>
@@ -1335,8 +1649,11 @@ export default function Onboarding() {
                     Your Experience
                   </h2>
                   <p className="mt-1.5 text-sm text-body">
-                    Tell us about the work you&apos;ve actually done as a{' '}
-                    <strong className="font-semibold text-plum-900">{currentRole}</strong>.
+                    Tell us about the work you&apos;ve actually done as a{" "}
+                    <strong className="font-semibold text-plum-900">
+                      {currentRole}
+                    </strong>
+                    .
                   </p>
                 </div>
 
@@ -1360,7 +1677,8 @@ export default function Onboarding() {
 
                   <div className="flex items-center justify-between pt-1.5 text-xs text-body/70">
                     <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                      <CheckCircle2 size={13} /> Minimum 100 characters recommended
+                      <CheckCircle2 size={13} /> Minimum 100 characters
+                      recommended
                     </span>
                     <span>{practicalExperience.length} / 2000 characters</span>
                   </div>
@@ -1390,10 +1708,18 @@ export default function Onboarding() {
                 </div>
 
                 <div className="flex items-center justify-between pt-4">
-                  <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevStep}
+                    className="px-6 py-2.5 text-xs font-semibold"
+                  >
                     â† Back
                   </Button>
-                  <Button variant="primary" onClick={handleNextStep} className="px-6 py-2.5 text-xs font-semibold">
+                  <Button
+                    variant="primary"
+                    onClick={handleNextStep}
+                    className="px-6 py-2.5 text-xs font-semibold"
+                  >
                     Continue to Goals â†’
                   </Button>
                 </div>
@@ -1425,10 +1751,10 @@ export default function Onboarding() {
                     </label>
                     <div className="grid grid-cols-2 gap-2.5">
                       {[
-                        'Grow in current career',
-                        'Move into a new role',
-                        'Pivot to new industry',
-                        'Explore career shift',
+                        "Grow in current career",
+                        "Move into a new role",
+                        "Pivot to new industry",
+                        "Explore career shift",
                       ].map((g) => (
                         <button
                           key={g}
@@ -1436,8 +1762,8 @@ export default function Onboarding() {
                           onClick={() => setGoalDirection(g)}
                           className={`rounded-xl border p-3.5 text-left transition-all ${
                             goalDirection === g
-                              ? 'border-plum-600 bg-plum-50 text-plum-950 font-bold shadow-xs'
-                              : 'border-hairline bg-white text-body hover:border-plum-200'
+                              ? "border-plum-600 bg-plum-50 text-plum-950 font-bold shadow-xs"
+                              : "border-hairline bg-white text-body hover:border-plum-200"
                           }`}
                         >
                           <span className="text-xs block">{g}</span>
@@ -1451,98 +1777,125 @@ export default function Onboarding() {
                       Target Career Interest
                     </label>
                     <p className="mt-1 text-xs text-body/70">
-                      Choose a career from the approved HerNext catalogue. This is stored as your
-                      target so recommendations are based on your real goal. The current
-                      catalogue covers finance, banking and fintech roles.
+                      Choose a career from the approved HerNext catalogue. This
+                      is stored as your target so recommendations are based on
+                      your real goal. The current catalogue covers finance,
+                      banking and fintech roles.
                     </p>
                     <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-hairline bg-slate-50/50 p-1.5">
                       {catalogueLoading && (
-                        <p className="px-3 py-2 text-xs text-body/70">Loading catalogue...</p>
+                        <p className="px-3 py-2 text-xs text-body/70">
+                          Loading catalogue...
+                        </p>
                       )}
                       {!catalogueLoading && catalogueCareers.length === 0 && (
                         <p className="px-3 py-2 text-xs text-rose-700">
-                          The career catalogue could not be loaded. Reload to try again.
+                          The career catalogue could not be loaded. Reload to
+                          try again.
                         </p>
                       )}
                       {catalogueCareers.map((career) => {
-                        const isSelected = targetCareerId === career.id
+                        const isSelected = targetCareerId === career.id;
                         return (
                           <button
                             key={career.id}
                             type="button"
                             onClick={() => {
-                              setTargetCareerId(career.id)
-                              setTargetRoleName(career.name)
+                              setTargetCareerId(career.id);
+                              setTargetRoleName(career.name);
                             }}
                             className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-all ${
-                              isSelected ? 'bg-plum-900 text-white' : 'hover:bg-plum-50'
+                              isSelected
+                                ? "bg-plum-900 text-white"
+                                : "hover:bg-plum-50"
                             }`}
                           >
                             <span className="mt-0.5">
-                              {isSelected ? <Check size={14} /> : <Target size={14} />}
+                              {isSelected ? (
+                                <Check size={14} />
+                              ) : (
+                                <Target size={14} />
+                              )}
                             </span>
                             <span className="min-w-0">
-                              <span className="block text-xs font-semibold">{career.name}</span>
+                              <span className="block text-xs font-semibold">
+                                {career.name}
+                              </span>
                               <span
-                                className={`block text-[10px] ${isSelected ? 'text-white/75' : 'text-body/70'}`}
+                                className={`block text-[10px] ${isSelected ? "text-white/75" : "text-body/70"}`}
                               >
                                 {career.industry} &middot; {career.level}
                               </span>
                             </span>
                           </button>
-                        )
+                        );
                       })}
                     </div>
-                    {targetCareerId !== '' && (
+                    {targetCareerId !== "" && (
                       <p className="mt-2 text-xs font-semibold text-plum-900">
-                        Selected target:{' '}
-                        {catalogueCareers.find((career) => career.id === targetCareerId)?.name}
+                        Selected target:{" "}
+                        {
+                          catalogueCareers.find(
+                            (career) => career.id === targetCareerId,
+                          )?.name
+                        }
                       </p>
                     )}
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-ink/80 mb-1.5">
-                      What matters most in your next chapter? (Select Priorities)
+                      What matters most in your next chapter? (Select
+                      Priorities)
                     </label>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {[
-                        'Higher Income',
-                        'AI & New Skills',
-                        'Remote / Hybrid',
-                        'Career Growth',
-                        'Leadership',
-                        'Work-Life Balance',
+                        "Higher Income",
+                        "AI & New Skills",
+                        "Remote / Hybrid",
+                        "Career Growth",
+                        "Leadership",
+                        "Work-Life Balance",
                       ].map((p) => {
-                        const isSelected = nextChapterPriorities.includes(p)
+                        const isSelected = nextChapterPriorities.includes(p);
                         return (
                           <button
                             key={p}
                             type="button"
                             onClick={() =>
                               setNextChapterPriorities((prev) =>
-                                isSelected ? prev.filter((item) => item !== p) : [...prev, p]
+                                isSelected
+                                  ? prev.filter((item) => item !== p)
+                                  : [...prev, p],
                               )
                             }
                             className={`rounded-xl border p-2.5 text-center text-xs font-medium transition-all ${
                               isSelected
-                                ? 'border-plum-600 bg-plum-900 text-white shadow-xs'
-                                : 'border-hairline bg-white text-body hover:border-plum-300'
+                                ? "border-plum-600 bg-plum-900 text-white shadow-xs"
+                                : "border-hairline bg-white text-body hover:border-plum-300"
                             }`}
                           >
                             {p}
                           </button>
-                        )
+                        );
                       })}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-4">
-                  <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevStep}
+                    className="px-6 py-2.5 text-xs font-semibold"
+                  >
                     â† Back
                   </Button>
-                  <Button variant="primary" onClick={handleNextStep} className="px-6 py-2.5 text-xs font-semibold">
+                  <Button
+                    variant="primary"
+                    onClick={handleNextStep}
+                    className="px-6 py-2.5 text-xs font-semibold"
+                  >
                     Continue to Review â†’
                   </Button>
                 </div>
@@ -1567,12 +1920,13 @@ export default function Onboarding() {
                       Review Your Information
                     </h2>
                     <p className="mt-1 text-sm text-body">
-                      Make sure everything looks right before we analyze your career profile.
+                      Make sure everything looks right before we analyze your
+                      career profile.
                     </p>
                   </div>
                   <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-peach-300 bg-peach-50 px-3 py-1 text-xs font-semibold text-plum-950">
-                    <CheckCircle2 size={13} className="text-emerald-600" />
-                    4 Steps Completed
+                    <CheckCircle2 size={13} className="text-emerald-600" />4
+                    Steps Completed
                   </span>
                 </div>
 
@@ -1586,8 +1940,12 @@ export default function Onboarding() {
                           <Briefcase size={16} />
                         </div>
                         <div>
-                          <h4 className="font-display text-sm font-bold text-ink">Career Right Now</h4>
-                          <span className="text-[11px] text-body">From Step 2</span>
+                          <h4 className="font-display text-sm font-bold text-ink">
+                            Career Right Now
+                          </h4>
+                          <span className="text-[11px] text-body">
+                            From Step 2
+                          </span>
                         </div>
                       </div>
                       <button
@@ -1601,26 +1959,37 @@ export default function Onboarding() {
 
                     <div className="grid grid-cols-2 gap-4 pt-3 sm:grid-cols-4 text-xs">
                       <div>
-                        <span className="text-[10px] font-semibold uppercase text-body/70">Role / Title</span>
+                        <span className="text-[10px] font-semibold uppercase text-body/70">
+                          Role / Title
+                        </span>
                         <p className="font-bold text-ink">{currentRole}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] font-semibold uppercase text-body/70">Industry</span>
+                        <span className="text-[10px] font-semibold uppercase text-body/70">
+                          Industry
+                        </span>
                         <p className="font-bold text-ink">{industry}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] font-semibold uppercase text-body/70">Experience</span>
+                        <span className="text-[10px] font-semibold uppercase text-body/70">
+                          Experience
+                        </span>
                         <p className="font-bold text-ink">{yearsExperience}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] font-semibold uppercase text-body/70">Employment</span>
+                        <span className="text-[10px] font-semibold uppercase text-body/70">
+                          Employment
+                        </span>
                         <p className="font-bold text-ink">{workSituation}</p>
                       </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between pt-2 border-t border-hairline/40 text-xs">
-                      <span className="text-body">Education: <strong>{education}</strong></span>
+                      <span className="text-body">
+                        Education: <strong>{education}</strong>
+                      </span>
                       <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-[11px]">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Verified Profile
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{" "}
+                        Verified Profile
                       </span>
                     </div>
                   </div>
@@ -1633,9 +2002,12 @@ export default function Onboarding() {
                           <BrainCircuit size={16} />
                         </div>
                         <div>
-                          <h4 className="font-display text-sm font-bold text-ink">Skills</h4>
+                          <h4 className="font-display text-sm font-bold text-ink">
+                            Skills
+                          </h4>
                           <span className="text-[11px] text-body">
-                            From Step 3 &bull; {selectedSkillIds.length} Core Competencies
+                            From Step 3 &bull; {selectedSkillIds.length} Core
+                            Competencies
                           </span>
                         </div>
                       </div>
@@ -1650,14 +2022,19 @@ export default function Onboarding() {
 
                     <div className="flex flex-wrap gap-2 pt-3">
                       {selectedSkillNames.map((s) => (
-                        <span key={s} className="rounded-lg border border-hairline bg-slate-50 px-2.5 py-1 text-xs font-medium text-ink">
+                        <span
+                          key={s}
+                          className="rounded-lg border border-hairline bg-slate-50 px-2.5 py-1 text-xs font-medium text-ink"
+                        >
                           {s}
                         </span>
                       ))}
                     </div>
 
                     <div className="mt-3 flex items-center justify-between pt-2 border-t border-hairline/40 text-xs">
-                      <span className="text-body">Overall Confidence Level:</span>
+                      <span className="text-body">
+                        Overall Confidence Level:
+                      </span>
                       <span className="font-bold text-plum-900 bg-peach-100 px-2.5 py-0.5 rounded-md text-[11px]">
                         {confidenceLevel}
                       </span>
@@ -1672,8 +2049,12 @@ export default function Onboarding() {
                           <Award size={16} />
                         </div>
                         <div>
-                          <h4 className="font-display text-sm font-bold text-ink">Experience</h4>
-                          <span className="text-[11px] text-body">From Step 4 &bull; Practical Narrative</span>
+                          <h4 className="font-display text-sm font-bold text-ink">
+                            Experience
+                          </h4>
+                          <span className="text-[11px] text-body">
+                            From Step 4 &bull; Practical Narrative
+                          </span>
                         </div>
                       </div>
                       <button
@@ -1691,8 +2072,9 @@ export default function Onboarding() {
                       </div>
                     ) : (
                       <div className="mt-3 rounded-xl bg-slate-50 p-3.5 text-xs text-body border border-hairline/60">
-                        You did not write a practical narrative. Go back to Step 4 to add one, otherwise your
-                        experience summary will be empty.
+                        You did not write a practical narrative. Go back to Step
+                        4 to add one, otherwise your experience summary will be
+                        empty.
                       </div>
                     )}
                   </div>
@@ -1705,8 +2087,12 @@ export default function Onboarding() {
                           <Target size={16} />
                         </div>
                         <div>
-                          <h4 className="font-display text-sm font-bold text-ink">Career Direction</h4>
-                          <span className="text-[11px] text-body">From Step 5 &bull; Goals & Next Chapter</span>
+                          <h4 className="font-display text-sm font-bold text-ink">
+                            Career Direction
+                          </h4>
+                          <span className="text-[11px] text-body">
+                            From Step 5 &bull; Goals & Next Chapter
+                          </span>
                         </div>
                       </div>
                       <button
@@ -1720,23 +2106,30 @@ export default function Onboarding() {
 
                     <div className="grid grid-cols-2 gap-4 pt-3 sm:grid-cols-3 text-xs">
                       <div>
-                        <span className="text-[10px] font-semibold uppercase text-body/70">Career Intention</span>
+                        <span className="text-[10px] font-semibold uppercase text-body/70">
+                          Career Intention
+                        </span>
                         <p className="font-bold text-ink">{goalDirection}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] font-semibold uppercase text-body/70">Target Career</span>
+                        <span className="text-[10px] font-semibold uppercase text-body/70">
+                          Target Career
+                        </span>
                         <p className="font-bold text-plum-900">
-                          {catalogueCareers.find((career) => career.id === targetCareerId)?.name ??
-                            'Not selected yet'}
+                          {catalogueCareers.find(
+                            (career) => career.id === targetCareerId,
+                          )?.name ?? "Not selected yet"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-[10px] font-semibold uppercase text-body/70">What Matters Most</span>
+                        <span className="text-[10px] font-semibold uppercase text-body/70">
+                          What Matters Most
+                        </span>
                         <p className="font-bold text-ink">
-                  {nextChapterPriorities.length > 0
-                    ? nextChapterPriorities.join(', ')
-                    : 'Not chosen yet'}
-                </p>
+                          {nextChapterPriorities.length > 0
+                            ? nextChapterPriorities.join(", ")
+                            : "Not chosen yet"}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1748,18 +2141,30 @@ export default function Onboarding() {
                     <Sparkles size={18} />
                   </div>
                   <div>
-                    <strong className="font-bold text-plum-950">Ready to continue?</strong>
+                    <strong className="font-bold text-plum-950">
+                      Ready to continue?
+                    </strong>
                     <p className="text-[11px] leading-relaxed text-plum-900/90">
-                      HerNext will use this information to understand your experience, identify transferable skills, assess AI impact, and recommend your next career path.
+                      HerNext will use this information to understand your
+                      experience, identify transferable skills, assess AI
+                      impact, and recommend your next career path.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
-                  <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevStep}
+                    className="px-6 py-2.5 text-xs font-semibold"
+                  >
                     â† Back
                   </Button>
-                  <Button variant="primary" onClick={handleNextStep} className="px-8 py-3 text-xs font-bold shadow-md">
+                  <Button
+                    variant="primary"
+                    onClick={handleNextStep}
+                    className="px-8 py-3 text-xs font-bold shadow-md"
+                  >
                     Start My Career Analysis â†’
                   </Button>
                 </div>
@@ -1782,7 +2187,8 @@ export default function Onboarding() {
                     Analyzing your career...
                   </h2>
                   <p className="mt-1.5 text-xs text-body sm:text-sm">
-                    We&apos;re finding the connections that could shape your next move.
+                    We&apos;re finding the connections that could shape your
+                    next move.
                   </p>
                 </div>
 
@@ -1800,7 +2206,10 @@ export default function Onboarding() {
                   {/* REVOLVING ORBITAL PARTICLES */}
                   <div
                     className="absolute inset-0 rounded-full pointer-events-none"
-                    style={{ transform: `rotate(${orbitAngle}deg)`, transition: 'transform 0.05s linear' }}
+                    style={{
+                      transform: `rotate(${orbitAngle}deg)`,
+                      transition: "transform 0.05s linear",
+                    }}
                   >
                     <div className="absolute top-2 left-1/2 -ml-2 h-4 w-4 rounded-full bg-plum-700 shadow-lg shadow-plum-500/50" />
                     <div className="absolute bottom-2 left-1/2 -ml-2 h-3 w-3 rounded-full bg-peach-400 shadow-md" />
@@ -1830,12 +2239,15 @@ export default function Onboarding() {
 
                   {/* CENTER CORE HARMONIZING BADGE */}
                   <div className="relative z-10 flex h-32 w-32 flex-col items-center justify-center rounded-full border-4 border-plum-700 bg-plum-950 text-white shadow-2xl">
-                    <Sparkles size={18} className="text-peach-300 animate-spin" />
+                    <Sparkles
+                      size={18}
+                      className="text-peach-300 animate-spin"
+                    />
                     <span className="font-display text-2xl font-extrabold text-white mt-1">
                       {analysisProgress}%
                     </span>
                     <span className="text-[9px] font-bold uppercase tracking-wider text-peach-200">
-                      {isAnalysisComplete ? 'COMPLETE' : 'HARMONIZING'}
+                      {isAnalysisComplete ? "COMPLETE" : "HARMONIZING"}
                     </span>
                   </div>
                 </div>
@@ -1866,8 +2278,10 @@ export default function Onboarding() {
                         Your executive trajectory is prepared!
                       </h4>
                       <p className="mt-1 text-xs text-emerald-800">
-                        3 tailored career pathways generated from your background as a{' '}
-                        <strong className="font-semibold">{currentRole}</strong>.
+                        3 tailored career pathways generated from your
+                        background as a{" "}
+                        <strong className="font-semibold">{currentRole}</strong>
+                        .
                       </p>
                     </div>
 
@@ -1908,5 +2322,5 @@ export default function Onboarding() {
         </footer>
       </div>
     </div>
-  )
+  );
 }

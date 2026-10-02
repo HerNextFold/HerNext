@@ -167,8 +167,14 @@ export const CareerRoadmap: React.FC = () => {
     }
   };
 
-  const handleStartLesson = () => {
-    navigate('/dashboard/roadmap/overview');
+  /**
+   * Carries the selected task to the learning page.
+   *
+   * Without the id, every task opened the same generic course because the
+   * learning page had nothing to key content on.
+   */
+  const handleStartLesson = (taskId?: string) => {
+    navigate(taskId ? `/dashboard/roadmap/overview/${taskId}` : '/dashboard/roadmap/overview');
   };
 
   const handleSelectPhase = (phase: 'foundation' | 'development' | 'proof') => {
@@ -393,7 +399,7 @@ export const CareerRoadmap: React.FC = () => {
                   <motion.button 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => handleStartLesson()}
+                    onClick={() => handleStartLesson(milestones[0]?.id)}
                     className="bg-[#2D1B4E] hover:bg-[#431F69] text-white font-bold text-xs px-6 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
                   >
                     <span>Start Learning</span>
@@ -431,7 +437,7 @@ export const CareerRoadmap: React.FC = () => {
                     <motion.div 
                       key={step.id}
                       whileHover={{ x: 2 }}
-                      onClick={() => handleStartLesson()}
+                      onClick={() => handleStartLesson(step.id)}
                       className={`bg-white/95 backdrop-blur-md rounded-2xl p-4 border border-purple-100/70 shadow-xs flex items-center justify-between gap-4 transition-all cursor-pointer hover:border-purple-200 group`}
                     >
                       <div className="flex items-center gap-4">

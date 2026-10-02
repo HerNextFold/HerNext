@@ -1,7 +1,7 @@
-import { AppError } from '../common/errors/app-error.js';
-import { errorCodes } from '../common/errors/error-codes.js';
-import type { UserRole } from '../common/types/auth.js';
-import { getPool, queryRow, queryText, type Db } from '../lib/db.js';
+import { AppError } from "../common/errors/app-error.js";
+import { errorCodes } from "../common/errors/error-codes.js";
+import type { UserRole } from "../common/types/auth.js";
+import { getPool, queryRow, queryText, type Db } from "../lib/db.js";
 
 export interface UserRow {
   id: string;
@@ -38,14 +38,17 @@ export interface CreateUserInput {
 
 function isUniqueViolation(error: unknown): boolean {
   return (
-    typeof error === 'object' &&
+    typeof error === "object" &&
     error !== null &&
-    (error as { code?: unknown }).code === '23505'
+    (error as { code?: unknown }).code === "23505"
   );
 }
 
 /** Inserts a user, mapping a duplicate-email unique violation to a 409. */
-export async function insertUser(db: Db, input: CreateUserInput): Promise<UserRow> {
+export async function insertUser(
+  db: Db,
+  input: CreateUserInput,
+): Promise<UserRow> {
   try {
     const row = await queryRow<UserRow>(
       db,
@@ -63,14 +66,14 @@ export async function insertUser(db: Db, input: CreateUserInput): Promise<UserRo
       ],
     );
     if (row === null) {
-      throw new Error('insertUser returned no row');
+      throw new Error("insertUser returned no row");
     }
     return row;
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new AppError(
         errorCodes.RESOURCE_ALREADY_EXISTS,
-        'An account with this email already exists.',
+        "An account with this email already exists.",
         409,
       );
     }
@@ -78,12 +81,26 @@ export async function insertUser(db: Db, input: CreateUserInput): Promise<UserRo
   }
 }
 
-export async function findUserByEmail(db: Db | undefined, email: string): Promise<UserRow | null> {
-  return queryRow<UserRow>(db ?? getPool(), 'SELECT * FROM "users" WHERE "email" = $1', [email]);
+export async function findUserByEmail(
+  db: Db | undefined,
+  email: string,
+): Promise<UserRow | null> {
+  return queryRow<UserRow>(
+    db ?? getPool(),
+    'SELECT * FROM "users" WHERE "email" = $1',
+    [email],
+  );
 }
 
-export async function findUserById(db: Db | undefined, id: string): Promise<UserRow | null> {
-  return queryRow<UserRow>(db ?? getPool(), 'SELECT * FROM "users" WHERE "id" = $1', [id]);
+export async function findUserById(
+  db: Db | undefined,
+  id: string,
+): Promise<UserRow | null> {
+  return queryRow<UserRow>(
+    db ?? getPool(),
+    'SELECT * FROM "users" WHERE "id" = $1',
+    [id],
+  );
 }
 
 export async function updateUserPasswordHash(
@@ -91,10 +108,11 @@ export async function updateUserPasswordHash(
   userId: string,
   passwordHash: string,
 ): Promise<void> {
-  await queryText(db, 'UPDATE "users" SET "passwordHash" = $1, "updatedAt" = now() WHERE "id" = $2', [
-    passwordHash,
-    userId,
-  ]);
+  await queryText(
+    db,
+    'UPDATE "users" SET "passwordHash" = $1, "updatedAt" = now() WHERE "id" = $2',
+    [passwordHash, userId],
+  );
 }
 
 /** Marks a user's email as verified. Called only after a valid OTP proof. */
@@ -150,21 +168,41 @@ export async function findParticipantProfileByUserId(
   );
 }
 
+/** Locks a participant profile row while a one-time account action is committed. */
+export async function lockParticipantProfileByUserId(
+  db: Db,
+  userId: string,
+): Promise<ParticipantProfileRow | null> {
+  return queryRow<ParticipantProfileRow>(
+    db,
+    'SELECT * FROM "participant_profiles" WHERE "userId" = $1 FOR UPDATE',
+    [userId],
+  );
+}
+
 /** Creates the ParticipantProfile required for every participant account. */
-export async function insertParticipantProfile(db: Db, userId: string): Promise<ParticipantProfileRow> {
+export async function insertParticipantProfile(
+  db: Db,
+  userId: string,
+): Promise<ParticipantProfileRow> {
   const row = await queryRow<ParticipantProfileRow>(
     db,
     'INSERT INTO "participant_profiles" ("userId") VALUES ($1) RETURNING *',
     [userId],
   );
   if (row === null) {
-    throw new Error('insertParticipantProfile returned no row');
+    throw new Error("insertParticipantProfile returned no row");
   }
   return row;
 }
 
-export async function deleteUserByEmail(db: Db | undefined, email: string): Promise<void> {
-  await queryText(db ?? getPool(), 'DELETE FROM "users" WHERE "email" = $1', [email]);
+export async function deleteUserByEmail(
+  db: Db | undefined,
+  email: string,
+): Promise<void> {
+  await queryText(db ?? getPool(), 'DELETE FROM "users" WHERE "email" = $1', [
+    email,
+  ]);
 }
 
 /**

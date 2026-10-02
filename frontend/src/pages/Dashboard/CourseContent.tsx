@@ -52,23 +52,6 @@ const PRESET_PRODUCTS = [
         why: 'Helps listeners understand foreign language nuance while keeping original vocal performances intact.'
       }
     ]
-  },
-  {
-    name: 'Figma (Design Tool)',
-    opportunities: [
-      {
-        what: 'Automated accessibility audit and contrast auto-fix suggestions on canvas during component wiring.',
-        why: 'Prevents expensive late-stage redesigns by enforcing WCAG compliance directly inside the design phase.'
-      },
-      {
-        what: 'Generative responsive layout variations based on established design system tokens.',
-        why: 'Eliminates repetitive auto-layout configuration so product designers focus on user flows.'
-      },
-      {
-        what: 'AI microcopy generator tailored to brand voice guidelines and target user demographics.',
-        why: 'Ensures tone consistency across global surfaces while speeding up localized copy iterations.'
-      }
-    ]
   }
 ];
 
@@ -77,7 +60,7 @@ interface LessonItem {
   numberStr: string;
   title: string;
   duration: string;
-  videoUrl: string;
+  videoUrl?: string;
   subtitle: string;
   articleContent: string[];
   keyTakeaway: string;
@@ -90,51 +73,52 @@ const LESSONS: LessonItem[] = [
     title: 'What is AI?',
     duration: '4 min',
     videoUrl: 'https://www.youtube.com/embed/aircAruvnKk',
-    subtitle: 'Understand the fundamentals of AI and why they matter for modern product designers.',
+    subtitle: 'Understand the fundamentals of AI and why they matter for any role.',
     articleContent: [
       'Artificial intelligence allows computer systems to perform tasks that typically require human intelligence, such as recognizing patterns, generating content, making predictions, and supporting decisions.',
-      'In modern digital products, AI is shifting interfaces from static UI templates to adaptive, conversational, and predictive experiences. Designers no longer just draw static layouts—they design system behaviors, confidence intervals, and fallback states.'
+      'Across most job roles, AI is shifting fixed, manual processes toward adaptive, assisted, and automated ones. What your work looks like is increasingly shaped by how these systems behave, how confident they are, and what happens when they are wrong.'
     ],
-    keyTakeaway: 'AI can extend what you can do as a designer—but human judgment, context, empathy, and creativity still matter.'
+    keyTakeaway: 'AI can extend what you can do, but human judgment, context, accountability, and domain expertise still matter.'
   },
   {
     id: 'lesson-2',
     numberStr: '02',
-    title: 'How AI is changing product design',
+    title: 'How AI is changing everyday work',
     duration: '4 min',
     videoUrl: 'https://www.youtube.com/embed/G2fqAlgmoPo',
-    subtitle: 'Explore how generative AI and neural models transform discovery, wireframing, and UI patterns.',
+    subtitle: 'Explore how generative AI and neural models are reshaping common workflows.',
     articleContent: [
-      'AI is fundamentally altering the product development lifecycle. During discovery, researchers use synthetic personas and automated telemetry synthesis to uncover user friction points instantly.',
-      'In interface design, static forms are giving way to dynamic prompt bars, multi-modal canvases, and ambient intelligent suggestions. Designers now manage output probability rather than fixed screen paths.'
+      'AI is altering day-to-day work in most fields. Teams use synthetic data and automated analysis to surface issues quickly instead of waiting for manual review.',
+      'Many repetitive, rule-based steps are being replaced by prompt-driven and generative tools. The practical skill is learning to review, correct, and take responsibility for what these tools produce.'
     ],
-    keyTakeaway: 'Instead of designing rigid page flows, AI designers create adaptive systems that respond intelligently to diverse user inputs.'
+    keyTakeaway: 'Instead of only producing fixed outputs, learn to direct adaptive tools and check their results.'
   },
   {
     id: 'lesson-3',
     numberStr: '03',
-    title: 'Where designers add human value',
+    title: 'Where people add human value',
     duration: '3 min',
-    videoUrl: 'https://www.youtube.com/embed/JMUxmLyrhSk',
-    subtitle: 'Identify the irreplaceable human elements in AI product development.',
+    // No videoUrl: this video is no longer publicly available, so the lesson is
+    // taught through the written article rather than a player that cannot play.
+    subtitle: 'Identify the irreplaceable human elements in AI-assisted work.',
     articleContent: [
-      'While AI can generate code and interface mockups at scale, it lacks genuine human empathy, moral intuition, and deep domain context.',
-      'Designers add high-leverage value by framing the right problems, setting ethical guardrails, evaluating output alignment, and advocating for user safety and clarity.'
+      'While AI can generate code, drafts, and mockups at scale, it lacks genuine empathy, moral intuition, and deep domain context.',
+      'People add high-leverage value by framing the right problems, setting ethical guardrails, evaluating output quality, and advocating for the people a decision affects.'
     ],
-    keyTakeaway: 'The value of a designer shifts from execution artifact creation to high-level system framing, ethical alignment, and human empathy.'
+    keyTakeaway: 'The value of a professional shifts from producing artifacts to framing problems, applying ethical judgment, and owning the outcome.'
   },
   {
     id: 'lesson-4',
     numberStr: '04',
     title: 'Using AI responsibly',
     duration: '4 min',
-    videoUrl: 'https://www.youtube.com/embed/f3j_V-LgE7Q',
-    subtitle: 'Master safety guardrails, avoiding hallucination traps, bias, and deceptive UX patterns.',
+    // No videoUrl, for the same reason as lesson-3.
+    subtitle: 'Master safety guardrails, avoiding hallucination traps, bias, and deceptive patterns.',
     articleContent: [
-      'Responsible AI design requires active vigilance against model hallucination, privacy breaches, and opaque algorithm decisions.',
-      'Always provide users with transparent confidence scores, visible edit controls, and clear disclaimers when interacting with generated intelligence.'
+      'Responsible AI use requires active vigilance against model hallucination, privacy breaches, and opaque automated decisions.',
+      'Keep people informed with transparent confidence signals, review controls, and clear disclaimers whenever generated output is involved.'
     ],
-    keyTakeaway: 'Trust is the core currency of AI products. Responsible UX design ensures users stay empowered, informed, and in control.'
+    keyTakeaway: 'Trust is the core currency of AI-assisted work. Responsible use keeps people empowered, informed, and in control.'
   }
 ];
 
@@ -150,16 +134,16 @@ interface QuizQuestion {
 const QUIZ_QUESTIONS: QuizQuestion[] = [
   {
     id: 1,
-    question: "What is one primary way AI supports a product designer in their workflow?",
+    question: "What is one primary way AI supports work in a professional role?",
     subtitle: "Select the best response based on Lesson 01: What is AI?",
     options: [
-      "Replace the designer's judgment completely",
-      "Help analyze research, uncover patterns, and automate repetitive tasks",
-      "Decide which problems users should have without user testing",
-      "Remove the need to understand user empathy"
+      "Replace human judgment completely",
+      "Help analyze data, uncover patterns, and automate repetitive tasks",
+      "Decide what should happen without human review",
+      "Remove the need to understand the people affected"
     ],
     correctIndex: 1,
-    explanation: "AI acts as a force multiplier for designers by analyzing telemetry data and pattern synthesis, but human context and judgment remain critical."
+    explanation: "AI acts as a force multiplier for professionals by analyzing data and pattern synthesis, but human context and judgment remain critical."
   },
   {
     id: 2,
@@ -176,7 +160,7 @@ const QUIZ_QUESTIONS: QuizQuestion[] = [
   },
   {
     id: 3,
-    question: "Where do human designers provide the highest strategic value in AI products?",
+    question: "Where do people provide the highest strategic value in AI-assisted work?",
     subtitle: "Select the key area where human judgment matters most (Lesson 03).",
     options: [
       "Problem framing, human empathy, and setting ethical guardrails",
@@ -185,7 +169,7 @@ const QUIZ_QUESTIONS: QuizQuestion[] = [
       "Ignoring user accessibility guidelines"
     ],
     correctIndex: 0,
-    explanation: "While AI handles rapid generation, human designers excel at high-level problem framing, moral intuition, and user empathy."
+    explanation: "While AI handles rapid generation, people excel at high-level problem framing, moral intuition, and empathy for those affected."
   },
   {
     id: 4,
@@ -198,16 +182,16 @@ const QUIZ_QUESTIONS: QuizQuestion[] = [
       "Assume model outputs are always 100% accurate"
     ],
     correctIndex: 1,
-    explanation: "Responsible AI design maintains user trust by showing transparent model confidence and allowing users to edit generated content."
+    explanation: "Responsible AI use maintains trust by showing transparent model confidence and allowing people to review and correct generated content."
   },
   {
     id: 5,
-    question: "Why is human empathy essential when building AI products?",
-    subtitle: "Select the foundational reason why empathy drives AI product design.",
+    question: "Why is human empathy essential when building AI-assisted services?",
+    subtitle: "Select the foundational reason why empathy drives responsible AI work.",
     options: [
       "AI models process data but lack genuine emotional understanding and moral context",
       "AI models already possess complete human emotional intelligence",
-      "Empathy is no longer relevant in software product design",
+      "Empathy is no longer relevant in software work",
       "Empathy only applies to physical product manufacturing"
     ],
     correctIndex: 0,
@@ -251,7 +235,7 @@ export const CourseContent: React.FC = () => {
 
   const handleSubmitChallenge = () => {
     if (!challengeProblem.trim() || !challengeSolution.trim() || !challengeReasoning.trim()) {
-      showToast('⚠️ Please complete all 3 design workspace fields before submitting your challenge!');
+      showToast('⚠️ Please complete all 3 workspace fields before submitting your challenge!');
       return;
     }
 
@@ -317,7 +301,7 @@ export const CourseContent: React.FC = () => {
     const refinedWhat = `${current.what.trim()} (Enhanced with multi-modal intent parsing)`;
     const refinedWhy = current.why.trim() 
       ? `${current.why.trim()} Neural feedback loop ensures human control.`
-      : 'Significantly improves user engagement while maintaining designer intent oversight.';
+      : 'Significantly improves user engagement while keeping a human accountable for the result.';
 
     const updated = [...opportunities];
     updated[index] = { what: refinedWhat, why: refinedWhy };
@@ -492,7 +476,7 @@ export const CourseContent: React.FC = () => {
 
         <div className="text-center hidden md:flex items-center gap-2">
           <h2 className="text-sm font-extrabold text-[#2D1B4E]">
-            AI Fundamentals for Product Designers
+            AI Fundamentals for Working Roles
           </h2>
           {activeSection === 'quick-check' ? (
             <span className="text-[11px] font-extrabold text-[#F05A7E] bg-[#FDF2F5] px-2.5 py-0.5 rounded-full inline-block">
@@ -813,8 +797,9 @@ export const CourseContent: React.FC = () => {
                 </p>
               </div>
 
-              {/* Video Player */}
-              <div className="bg-black rounded-3xl overflow-hidden shadow-xl border border-gray-800 relative group aspect-video flex items-center justify-center">
+              {/* Video Player - only rendered when the lesson has an available video */}
+              {activeLesson.videoUrl && (
+                <div className="bg-black rounded-3xl overflow-hidden shadow-xl border border-gray-800 relative group aspect-video flex items-center justify-center">
                 <iframe 
                   src={`${activeLesson.videoUrl}?rel=0&modestbranding=1`} 
                   title={activeLesson.title}
@@ -823,6 +808,7 @@ export const CourseContent: React.FC = () => {
                   allowFullScreen
                 />
               </div>
+              )}
 
               {/* Mark Video Watched Button */}
               <div className="bg-purple-50/70 border border-purple-100 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -955,7 +941,7 @@ export const CourseContent: React.FC = () => {
                       </h2>
                       <p className="text-xs sm:text-sm mt-1 max-w-lg mx-auto leading-relaxed text-gray-600">
                         {quizPassed 
-                          ? "Great job! You have demonstrated strong competency in AI product design fundamentals. Practice Activity is now unlocked."
+                          ? "Great job! You have demonstrated strong competency in AI fundamentals. Practice Activity is now unlocked."
                           : "You scored under 80%. You need at least 80% (4 out of 5 correct) to unlock Practice. Please review the corrections below and retake the check."}
                       </p>
                     </div>
@@ -1363,7 +1349,7 @@ export const CourseContent: React.FC = () => {
                     <Lightbulb size={16} />
                   </div>
                   <p className="leading-relaxed font-medium">
-                    <strong className="text-[#2D1B4E] font-bold">Helpful tip:</strong> Think about repetitive tasks, personalization, user support, recommendations, or research triage where human designers remain in the loop.
+                    <strong className="text-[#2D1B4E] font-bold">Helpful tip:</strong> Think about repetitive tasks, personalization, user support, or recommendations where a person remains accountable.
                   </p>
                 </div>
 
@@ -1447,7 +1433,7 @@ export const CourseContent: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl p-4 border border-purple-100/70 text-xs text-gray-700 leading-relaxed font-medium shadow-2xs">
-                  A banking app receives frequent complaints from users who struggle to understand why a transaction has failed. As a product designer, evaluate how AI could improve this experience without removing human control.
+                  A service receives frequent complaints from people who struggle to understand why a transaction has failed. Evaluate how AI could improve this experience without removing human control.
                 </div>
 
                 {/* WHAT YOU NEED TO DO 3 Guidance Cards */}
@@ -1479,8 +1465,8 @@ export const CourseContent: React.FC = () => {
               <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100/80 shadow-xs space-y-7">
                 <div className="flex items-center justify-between border-b border-purple-100/60 pb-4">
                   <div>
-                    <h2 className="text-base font-extrabold text-[#2D1B4E]">Design Workspace</h2>
-                    <p className="text-xs text-gray-400 font-medium">Formulate and document your structured AI design recommendation.</p>
+                    <h2 className="text-base font-extrabold text-[#2D1B4E]">Workspace</h2>
+                    <p className="text-xs text-gray-400 font-medium">Formulate and document your structured AI recommendation.</p>
                   </div>
                   <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Auto-saving
@@ -1637,13 +1623,13 @@ export const CourseContent: React.FC = () => {
                   </span>
                   <div className="flex flex-wrap gap-2">
                     <span className="bg-purple-50 text-[#8C3F96] text-xs font-extrabold px-3 py-1.5 rounded-xl border border-purple-100">
-                      AI Product Thinking
+                      AI Awareness
                     </span>
                     <span className="bg-purple-50 text-[#8C3F96] text-xs font-extrabold px-3 py-1.5 rounded-xl border border-purple-100">
                       Problem Identification
                     </span>
                     <span className="bg-purple-50 text-[#8C3F96] text-xs font-extrabold px-3 py-1.5 rounded-xl border border-purple-100">
-                      UX Analysis
+                      Impact Analysis
                     </span>
                   </div>
                 </div>
@@ -1678,7 +1664,7 @@ export const CourseContent: React.FC = () => {
                   </div>
 
                   <span className="text-[11px] font-semibold text-gray-500">
-                    Course complete · AI Fundamentals for Product Designers · 100% complete
+                    Course complete · AI Fundamentals for Working Roles · 100% complete
                   </span>
                 </div>
               </div>

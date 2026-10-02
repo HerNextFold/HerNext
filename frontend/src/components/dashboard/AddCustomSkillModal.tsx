@@ -9,12 +9,22 @@ import type { SkillItem } from './SkillDetailModal';
 
 interface AddCustomSkillModalProps {
   onClose: () => void;
-  onAddSkill: (newSkill: SkillItem) => void;
+  /**
+   * Persists the skill and resolves once the save has been accepted.
+   *
+   * Only the trimmed name is persisted. Evidence and notes are recorded on the
+   * participant's claim, but HerNext has no store for them, so they are not
+   * sent or pretended to be saved.
+   */
+  onAddSkill: (newSkill: SkillItem) => Promise<void> | void;
+  /** Disables the submit button while a save is in flight. */
+  isSaving?: boolean;
 }
 
 export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
   onClose,
-  onAddSkill
+  onAddSkill,
+  isSaving = false
 }) => {
   const [skillName, setSkillName] = useState('');
   const [sourceType, setSourceType] = useState('Portfolio');
@@ -24,10 +34,10 @@ export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
   // Only participant-supplied fields are recorded. HerNext has no scoring
   // endpoint for a self-declared skill, so proficiency, market impact and
   // learning modules stay unset instead of being invented here.
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = skillName.trim();
-    if (!name) return;
+    if (!name || isSaving) return;
 
     const newSkill: SkillItem = {
       id: `custom-${Date.now()}`,
@@ -49,7 +59,10 @@ export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
         : [],
       learningModules: []
     };
-    onAddSkill(newSkill);
+
+    // Awaited so the modal stays open on a failed save instead of reporting
+    // success for a skill that was never stored.
+    await onAddSkill(newSkill);
     onClose();
   };
 
@@ -58,8 +71,8 @@ export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={onClose}
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+      onClick={isSaving ? undefined : onClose}
+      className={`fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 ${isSaving ? '' : 'cursor-pointer'}`}
     >
       <motion.div 
         initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -81,21 +94,26 @@ export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
           </div>
           <h3 className="text-xl font-bold text-white">Add a Skill to Your Profile</h3>
           <p className="text-xs text-purple-200/80 mt-1">
-            Record a skill you already have. It is saved as your own claim and is not scored until HerNext assesses it.
+            Record a skill you already have, even if HerNext does not suggest it. It is saved to your profile as your own claim.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">Skill or Competency Name</label>
-            <input 
-              type="text" 
-              placeholder="e.g. Design Systems Architecture, LLM Prompt UX"
+            <input
+              type="text"
+              placeholder="e.g. Kubernetes, Technical Writing, CRM Administration"
               value={skillName}
               onChange={(e) => setSkillName(e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:border-[#8C3F96] focus:ring-2 focus:ring-purple-100 outline-none transition-all"
+              maxLength={120}
+              disabled={isSaving}
+              className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:border-[#8C3F96] focus:ring-2 focus:ring-purple-100 outline-none transition-all disabled:opacity-60"
             />
+            <p className="text-[10px] text-gray-400 font-medium mt-1">
+              Anything you have that HerNext does not suggest yet. It is stored exactly as you type it.
+            </p>
           </div>
 
           <div>
@@ -147,17 +165,18 @@ export const AddCustomSkillModal: React.FC<AddCustomSkillModalProps> = ({
             <button 
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+              disabled={isSaving}
+              className="px-4 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-100 disabled:opacity-50 rounded-xl transition-colors cursor-pointer"
             >
               Cancel
             </button>
-            <button 
+            <button
               type="submit"
-              disabled={!skillName.trim()}
+              disabled={!skillName.trim() || isSaving}
               className="bg-[#2D1B4E] hover:bg-[#431F69] disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Sparkles size={14} />
-              <span>Save Skill</span>
+              <span>{isSaving ? 'Saving...' : 'Save Skill'}</span>
             </button>
           </div>
         </form>

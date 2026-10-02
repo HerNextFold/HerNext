@@ -1,19 +1,38 @@
-import { AppError } from '../../common/errors/app-error.js';
-import { errorCodes } from '../../common/errors/error-codes.js';
-import { withTransaction, type Db } from '../../lib/db.js';
+import { AppError } from "../../common/errors/app-error.js";
+import { errorCodes } from "../../common/errors/error-codes.js";
+import { withTransaction, type Db } from "../../lib/db.js";
 import {
   findCareerProfileByUserId,
   findOnboardingStatusByUserId,
   upsertCareerProfile,
   type CareerProfileRow,
-} from '../../models/career-profile.model.js';
-import { assertCareerExists, findCareerById, findOrCreateSkillByName, findSkillsByIds } from '../../models/catalogue.model.js';
-import { replaceCareerRecommendations } from '../../models/careers.model.js';
-import { insertExperience, type CreateExperienceInput } from '../../models/experience.model.js';
-import { findParticipantProfileByUserId, findUserById, updateUserLocation } from '../../models/user.model.js';
-import { listUserSkillsWithNames, upsertUserSkill } from '../../models/user-skill.model.js';
-import type { CompleteOnboardingBody, UpsertProfileBody } from './profile.schemas.js';
-import { toProfileView, type CareerProfileView } from './profile.types.js';
+} from "../../models/career-profile.model.js";
+import {
+  assertCareerExists,
+  findCareerById,
+  findOrCreateSkillByName,
+  findSkillsByIds,
+} from "../../models/catalogue.model.js";
+import { replaceCareerRecommendations } from "../../models/careers.model.js";
+import {
+  insertExperience,
+  type CreateExperienceInput,
+} from "../../models/experience.model.js";
+import {
+  findParticipantProfileByUserId,
+  findUserById,
+  lockParticipantProfileByUserId,
+  updateUserLocation,
+} from "../../models/user.model.js";
+import {
+  listUserSkillsWithNames,
+  upsertUserSkill,
+} from "../../models/user-skill.model.js";
+import type {
+  CompleteOnboardingBody,
+  UpsertProfileBody,
+} from "./profile.schemas.js";
+import { toProfileView, type CareerProfileView } from "./profile.types.js";
 
 /**
  * Career profile business logic. Ownership is always derived from the
@@ -24,7 +43,11 @@ export class ProfileService {
   async getProfile(userId: string): Promise<CareerProfileView> {
     const profile = await findCareerProfileByUserId(undefined, userId);
     if (profile === null) {
-      throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Career profile not found', 404);
+      throw new AppError(
+        errorCodes.RESOURCE_NOT_FOUND,
+        "Career profile not found",
+        404,
+      );
     }
     return this.buildView(userId, profile);
   }
@@ -37,11 +60,21 @@ export class ProfileService {
    * "users" row in the same transaction. Location is only touched when the
    * caller actually sends it, so a client that omits it keeps the stored value.
    */
-  async saveProfile(userId: string, input: UpsertProfileBody): Promise<CareerProfileView> {
+  async saveProfile(
+    userId: string,
+    input: UpsertProfileBody,
+  ): Promise<CareerProfileView> {
     const profile = await withTransaction(async (client) => {
-      const participantProfile = await findParticipantProfileByUserId(client, userId);
+      const participantProfile = await findParticipantProfileByUserId(
+        client,
+        userId,
+      );
       if (participantProfile === null) {
-        throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Participant profile not found', 404);
+        throw new AppError(
+          errorCodes.RESOURCE_NOT_FOUND,
+          "Participant profile not found",
+          404,
+        );
       }
 
       if (input.country !== undefined || input.state !== undefined) {
@@ -50,7 +83,11 @@ export class ProfileService {
           ...(input.state === undefined ? {} : { state: input.state }),
         });
         if (updated === null) {
-          throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Account not found', 404);
+          throw new AppError(
+            errorCodes.RESOURCE_NOT_FOUND,
+            "Account not found",
+            404,
+          );
         }
       }
 
@@ -103,9 +140,31 @@ export class ProfileService {
     input: CompleteOnboardingBody,
   ): Promise<CareerProfileView> {
     const profile = await withTransaction(async (client) => {
-      const participantProfile = await findParticipantProfileByUserId(client, userId);
+      const participantProfile = await lockParticipantProfileByUserId(
+        client,
+        userId,
+      );
       if (participantProfile === null) {
-        throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Participant profile not found', 404);
+        throw new AppError(
+          errorCodes.RESOURCE_NOT_FOUND,
+          "Participant profile not found",
+          404,
+        );
+      }
+
+      const onboardingStatus = await findOnboardingStatusByUserId(
+        client,
+        userId,
+      );
+      if (
+        onboardingStatus !== null &&
+        onboardingStatus.onboardingCompletedAt !== null
+      ) {
+        throw new AppError(
+          errorCodes.RESOURCE_ALREADY_EXISTS,
+          "Onboarding has already been completed.",
+          409,
+        );
       }
 
       if (input.country !== undefined || input.state !== undefined) {
@@ -114,7 +173,11 @@ export class ProfileService {
           ...(input.state === undefined ? {} : { state: input.state }),
         });
         if (updated === null) {
-          throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Account not found', 404);
+          throw new AppError(
+            errorCodes.RESOURCE_NOT_FOUND,
+            "Account not found",
+            404,
+          );
         }
       }
 
@@ -149,10 +212,13 @@ export class ProfileService {
           description: experience.description,
           employmentType: experience.employmentType,
         };
-        if (experience.organization !== undefined) record.organization = experience.organization;
+        if (experience.organization !== undefined)
+          record.organization = experience.organization;
         if (experience.years !== undefined) record.years = experience.years;
-        if (experience.startDate !== undefined) record.startDate = experience.startDate;
-        if (experience.endDate !== undefined) record.endDate = experience.endDate;
+        if (experience.startDate !== undefined)
+          record.startDate = experience.startDate;
+        if (experience.endDate !== undefined)
+          record.endDate = experience.endDate;
         await insertExperience(client, record);
       }
 
@@ -172,7 +238,9 @@ export class ProfileService {
    * Explicit onboarding completion state for the authenticated participant.
    * Never infers completion from the mere existence of a profile row.
    */
-  async getOnboardingStatus(userId: string): Promise<{ completed: boolean; completedAt: string | null }> {
+  async getOnboardingStatus(
+    userId: string,
+  ): Promise<{ completed: boolean; completedAt: string | null }> {
     const status = await findOnboardingStatusByUserId(undefined, userId);
     const completedAt = status?.onboardingCompletedAt ?? null;
     return {
@@ -193,7 +261,7 @@ export class ProfileService {
     if (unknown.length > 0) {
       throw new AppError(
         errorCodes.VALIDATION_ERROR,
-        'One or more skills are not part of the approved skill catalogue.',
+        "One or more skills are not part of the approved skill catalogue.",
         400,
         { unknownSkillIds: unknown },
       );
@@ -202,7 +270,7 @@ export class ProfileService {
       await upsertUserSkill(db, {
         userId,
         skillId,
-        source: 'SELF_REPORTED',
+        source: "SELF_REPORTED",
         confidence: 1,
         proficiency: 0,
       });
@@ -233,7 +301,7 @@ export class ProfileService {
     const seen = new Set<string>();
     for (const rawName of names) {
       const name = rawName.trim();
-      if (name === '') {
+      if (name === "") {
         continue;
       }
       const key = name.toLowerCase();
@@ -245,21 +313,30 @@ export class ProfileService {
       await upsertUserSkill(db, {
         userId,
         skillId: skill.id,
-        source: 'SELF_REPORTED',
+        source: "SELF_REPORTED",
         confidence: 1,
         proficiency: 0,
       });
     }
   }
 
-  private async buildView(userId: string, profile: CareerProfileRow): Promise<CareerProfileView> {
+  private async buildView(
+    userId: string,
+    profile: CareerProfileRow,
+  ): Promise<CareerProfileView> {
     const [targetCareer, skills, user] = await Promise.all([
-      profile.targetCareerId === null ? null : findCareerById(undefined, profile.targetCareerId),
+      profile.targetCareerId === null
+        ? null
+        : findCareerById(undefined, profile.targetCareerId),
       listUserSkillsWithNames(undefined, userId),
       findUserById(undefined, userId),
     ]);
     if (user === null) {
-      throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Account not found', 404);
+      throw new AppError(
+        errorCodes.RESOURCE_NOT_FOUND,
+        "Account not found",
+        404,
+      );
     }
     return toProfileView(profile, targetCareer, skills, user);
   }

@@ -24,6 +24,7 @@ import {
   getProfile,
   getSkillGaps,
   getTransferableSkills,
+  updateProfile,
   type CareerProfile,
   type SkillGapsResponse,
   type TransferableSkill,
@@ -125,6 +126,12 @@ export const MySkills: React.FC = () => {
   const [loadError, setLoadError] = useState('');
   const [skillGaps, setSkillGaps] = useState<SkillGapsResponse | null>(null);
   const [topCareer, setTopCareer] = useState<{ careerName: string; matchScore: number; reason: string } | null>(null);
+  // Kept so adding a skill can read-modify-write the profile fields that
+  // PUT /profile requires, and so the list can be rebuilt from the server
+  // response after a successful save.
+  const [profileForWrite, setProfileForWrite] = useState<CareerProfile | null>(null);
+  const [transferableSkills, setTransferableSkills] = useState<TransferableSkill[]>([]);
+  const [isSavingSkill, setIsSavingSkill] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,6 +165,8 @@ export const MySkills: React.FC = () => {
 
         setSkillGaps(gaps);
         setTopCareer(top);
+        setProfileForWrite(profile);
+        setTransferableSkills(transferable.skills);
         setSkillsList(buildRealSkills(profile, transferable.skills, gaps));
       } catch (err) {
         if (cancelled) return;
@@ -198,9 +207,54 @@ export const MySkills: React.FC = () => {
     }
   };
 
-  const handleAddCustomSkill = (newSkill: SkillItem) => {
-    setSkillsList([newSkill, ...skillsList]);
-    showToast(`✨ ${newSkill.name} extracted and added to your matrix!`);
+  /**
+   * Persists a participant-typed skill.
+   *
+   * `PUT /profile` is additive for skills: the backend upserts each named
+   * skill and never clears the existing ones, so only the new name is sent.
+   * The backend trims, rejects blanks, de-duplicates case-insensitively and
+   * reuses an approved catalogue skill only on an exact (case-insensitive)
+   * name match, so it is never silently mapped to a different skill.
+   */
+  const handleAddCustomSkill = async (newSkill: SkillItem) => {
+    const name = newSkill.name.trim();
+    if (!name) {
+      showToast('Enter a skill name first.');
+      return;
+    }
+    if (skillsList.some((s) => s.name.toLowerCase() === name.toLowerCase())) {
+      showToast(`"${name}" is already in your skills.`);
+      return;
+    }
+    if (!profileForWrite) {
+      showToast('Complete your profile before adding a skill.');
+      return;
+    }
+
+    setIsSavingSkill(true);
+    try {
+      await updateProfile({
+        currentOccupation: profileForWrite.currentOccupation,
+        industry: profileForWrite.industry,
+        yearsOfExperience: profileForWrite.yearsOfExperience,
+        employmentType: profileForWrite.employmentType,
+        education: profileForWrite.education,
+        country: profileForWrite.country,
+        state: profileForWrite.state,
+        customSkills: [name],
+      });
+
+      // Re-read the profile so the new skill arrives from the same source the
+      // page renders every other skill from, instead of a hand-built object.
+      const updated = await getProfile();
+      setProfileForWrite(updated);
+      setSkillsList(buildRealSkills(updated, transferableSkills, skillGaps));
+      showToast(`"${name}" added to your skills.`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Could not add that skill. Please try again.');
+    } finally {
+      setIsSavingSkill(false);
+    }
   };
 
   const filteredSkills = skillsList.filter((s) => {
@@ -796,9 +850,10 @@ export const MySkills: React.FC = () => {
       {/* Add Custom Skill Modal */}
       <AnimatePresence>
         {showAddCustomModal && (
-          <AddCustomSkillModal 
+          <AddCustomSkillModal
             onClose={() => setShowAddCustomModal(false)}
             onAddSkill={handleAddCustomSkill}
+            isSaving={isSavingSkill}
           />
         )}
       </AnimatePresence>

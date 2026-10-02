@@ -289,9 +289,13 @@ export function getCurrentUser(): Promise<PublicUser> {
  * access token, so the request cannot be pointed at another account. The caller
  * must clear its local session only after this resolves, because a rejected
  * request means the account is still there.
+ *
+ * The empty `{}` body is required only to satisfy Fastify's JSON parser, which
+ * rejects a bodyless request that declares `Content-Type: application/json`. The
+ * route reads no body; see runCareerImpact() for the same pattern.
  */
 export function deleteCurrentAccount(): Promise<void> {
-  return authRequest<void>('DELETE', '/auth/me')
+  return authRequest<void>('DELETE', '/auth/me', {})
 }
 
 export type EmploymentType =
@@ -310,6 +314,18 @@ export interface UpdateProfilePayload {
   education?: string | null
   country?: string
   state?: string | null
+  /**
+   * Skills the participant typed that are not in the approved catalogue.
+   *
+   * These are added to the participant's profile; existing skills are never
+   * replaced, because the backend upserts them rather than overwriting the
+   * list. The backend trims each name, rejects blanks, de-duplicates
+   * case-insensitively, and reuses an approved catalogue skill only when the
+   * name matches one exactly (ignoring case).
+   *
+   * Omit the field to leave custom skills untouched.
+   */
+  customSkills?: string[]
 }
 
 export interface CareerProfile {
@@ -337,6 +353,11 @@ export interface CareerProfile {
  * so a partial save can never be mistaken for a finished onboarding.
  * `country`/`state` are optional: omit a field to keep its stored value, or
  * pass `state: null` to clear the stored state or province.
+ *
+ * `customSkills` is the read-modify-free path for adding a skill the
+ * participant typed that HerNext does not suggest. It is additive: the backend
+ * upserts the named skills and never removes or rewrites the ones already on
+ * the profile, so a caller can send just the new names.
  */
 export function updateProfile(payload: UpdateProfilePayload): Promise<CareerProfile> {
   return authRequest<CareerProfile>('PUT', '/profile', payload)
@@ -588,9 +609,17 @@ export function getCareerImpact(experienceId: string): Promise<CareerImpactAnaly
   return authRequest<CareerImpactAnalysis>('GET', `/ai/career-impact/${experienceId}`)
 }
 
-/** Generates a new assessment (or reuses one already valid for the current experience). */
+/**
+ * Generates a new assessment (or reuses one already valid for the current experience).
+ *
+ * The empty object is required, not decorative. authRequest always sends
+ * `Content-Type: application/json`, and Fastify's JSON parser rejects a bodyless
+ * request carrying that header with FST_ERR_CTP_EMPTY_JSON_BODY (400
+ * "Invalid request data") before the route handler runs. The route takes no
+ * body, so `{}` is the honest body for it.
+ */
 export function runCareerImpact(experienceId: string): Promise<CareerImpactAnalysis> {
-  return authRequest<CareerImpactAnalysis>('POST', `/ai/career-impact/${experienceId}`)
+  return authRequest<CareerImpactAnalysis>('POST', `/ai/career-impact/${experienceId}`, {})
 }
 
 export type RoadmapTaskStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
@@ -635,6 +664,29 @@ export interface GenerateRoadmapPayload {
 /** Generates a roadmap for the given approved career (or reuses the current one if it's still for the same career). */
 export function generateRoadmap(payload: GenerateRoadmapPayload): Promise<RoadmapWithPhases> {
   return authRequest<RoadmapWithPhases>('POST', '/roadmaps/generate', payload)
+}
+
+export interface RoadmapTaskStatusUpdate {
+  taskId: string
+  status: RoadmapTaskStatus
+  completedAt: string | null
+  /** Server-recomputed from the task rows; never calculated on the client. */
+  roadmapProgress: number
+  phaseProgress: { DAY_30: number; DAY_60: number; DAY_90: number }
+}
+
+/**
+ * Updates a roadmap task's status through the existing authoritative endpoint.
+ *
+ * The server recomputes every progress figure from the stored task rows, so
+ * callers must render whatever it returns rather than tracking progress
+ * locally. Throws ApiError(404) when the task does not belong to the caller.
+ */
+export function updateRoadmapTaskStatus(
+  taskId: string,
+  status: RoadmapTaskStatus,
+): Promise<RoadmapTaskStatusUpdate> {
+  return authRequest<RoadmapTaskStatusUpdate>('PATCH', `/roadmaps/tasks/${taskId}`, { status })
 }
 
 export type SkillSource = 'SELF_REPORTED' | 'AI_DERIVED' | 'CHALLENGE' | 'VERIFIED'
