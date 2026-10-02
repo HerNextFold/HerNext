@@ -18,7 +18,14 @@ import {
 import { LocationSelects } from '../../components/LocationSelects';
 import { useUserContext } from '../../context/UserContext';
 import { clearSession } from '../../lib/session';
-import { ApiError, getCurrentUser, getProfile, updateProfile, type CareerProfile } from '../../lib/api';
+import {
+  ApiError,
+  deleteCurrentAccount,
+  getCurrentUser,
+  getProfile,
+  updateProfile,
+  type CareerProfile,
+} from '../../lib/api';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -37,6 +44,8 @@ const SettingsPage: React.FC = () => {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // Form states for account editing
   const [editFullName, setEditFullName] = useState(user.fullName || '');
@@ -189,12 +198,28 @@ const SettingsPage: React.FC = () => {
     navigate('/sign-in', { replace: true });
   };
 
-  const handleDeleteAccount = () => {
-    setShowDeleteAccountModal(false);
-    showToast('Account scheduled for deletion. Redirecting...');
-    setTimeout(() => {
-      navigate('/sign-in');
-    }, 1500);
+  const handleDeleteAccount = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      // The account is removed server-side first. Only once the backend confirms
+      // it do we drop the local session, so a failed request cannot leave the
+      // user signed out of an account that still exists.
+      await deleteCurrentAccount();
+      setShowDeleteAccountModal(false);
+      clearSession();
+      showToast('Your account has been deleted.');
+      navigate('/sign-in', { replace: true });
+    } catch (err) {
+      // The account was NOT deleted. Keep the user signed in and say why.
+      setDeleteError(
+        err instanceof ApiError
+          ? err.message
+          : 'We could not delete your account. Please try again.',
+      );
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -274,13 +299,22 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={openEditAccountModal}
-                disabled={isLoadingAccount}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8C3F96] hover:text-[#73317c] bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <Edit2 size={13} /> Edit Account
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowSignOutModal(true)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 hover:text-[#2D1B4E] bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                >
+                  <LogOut size={13} /> Log out
+                </button>
+
+                <button
+                  onClick={openEditAccountModal}
+                  disabled={isLoadingAccount}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8C3F96] hover:text-[#73317c] bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <Edit2 size={13} /> Edit Account
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4 pt-2">
@@ -364,7 +398,7 @@ const SettingsPage: React.FC = () => {
                   onClick={() => setShowSignOutModal(true)}
                   className="inline-flex items-center gap-1.5 border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-bold px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
                 >
-                  <LogOut size={13} /> Sign out of HerNext
+                  <LogOut size={13} /> Log out
                 </button>
               </div>
             </div>
@@ -779,20 +813,32 @@ const SettingsPage: React.FC = () => {
               </div>
               <h3 className="font-bold text-lg text-red-900 mb-1">Delete Account Permanently</h3>
               <p className="text-xs text-gray-600 mb-6 leading-relaxed">
-                This operation is non-reversible. All your verified evidence, skill matrix benchmarks, and career roadmap progress will be deleted forever.
+                This operation is non-reversible. Your account and all of its data
+                &mdash; profile, experiences, skills, roadmap progress and evidence
+                &mdash; will be permanently removed from our database.
               </p>
+              {deleteError && (
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  {deleteError}
+                </div>
+              )}
               <div className="flex gap-3">
-                <button 
-                  onClick={() => setShowDeleteAccountModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50"
+                <button
+                  onClick={() => {
+                    setShowDeleteAccountModal(false);
+                    setDeleteError('');
+                  }}
+                  disabled={isDeleting}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Keep Account
                 </button>
-                <button 
+                <button
                   onClick={handleDeleteAccount}
-                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md"
+                  disabled={isDeleting}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md disabled:opacity-50"
                 >
-                  Confirm Delete
+                  {isDeleting ? 'Deleting...' : 'Confirm Delete'}
                 </button>
               </div>
             </motion.div>

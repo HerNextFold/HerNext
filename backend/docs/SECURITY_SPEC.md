@@ -228,7 +228,7 @@ Access tokens should have a relatively short lifetime.
 **Implemented (MVP decision):**
 
 ```text
-Access token: 3d   (config: JWT_EXPIRES_IN, default "3d" in src/config/env.ts)
+Access token: 30d  (config: JWT_EXPIRES_IN, default "30d" in src/config/env.ts)
 ```
 
 ### Why this deviates from the original 15-30 minute guidance
@@ -248,10 +248,12 @@ safe when something can silently replace it; here nothing can.
 
 ### Residual risk (accepted, not hidden)
 
-A 3-day access token widens the window in which a stolen token is usable, and the
+A 30-day access token widens the window in which a stolen token is usable, and the
 token is held in `localStorage`, so a successful XSS on this origin can read it.
 This is a deliberate trade of security margin for a usable MVP, not a claim that
-3d is safer.
+30d is safer. The lifetime is deliberately long so a demo or judging session is
+never interrupted by an expiry; a participant who wants to end the session
+immediately can always use Sign out, which revokes the client copy.
 
 What should supersede this section:
 

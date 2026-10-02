@@ -166,3 +166,26 @@ export async function insertParticipantProfile(db: Db, userId: string): Promise<
 export async function deleteUserByEmail(db: Db | undefined, email: string): Promise<void> {
   await queryText(db ?? getPool(), 'DELETE FROM "users" WHERE "email" = $1', [email]);
 }
+
+/**
+ * Permanently deletes one account by id.
+ *
+ * Every foreign key in the schema that points at "users" is declared
+ * `ON DELETE CASCADE` (db/migrations/001_init.sql plus the later auth
+ * migrations), and the child tables hanging off "participant_profiles" cascade
+ * in turn. Deleting the single "users" row is therefore the complete, correct
+ * operation: PostgreSQL removes only this user's own records and refuses to
+ * touch anyone else's, because no other row references this id.
+ *
+ * The id is always the authenticated `request.user.id`, never a value taken
+ * from the request body, so one participant can never delete another account.
+ * Returns true when a row was removed, false when the id matched nothing.
+ */
+export async function deleteUserById(db: Db, userId: string): Promise<boolean> {
+  const rows = await queryText<{ id: string }>(
+    db,
+    'DELETE FROM "users" WHERE "id" = $1 RETURNING "id"',
+    [userId],
+  );
+  return rows.length > 0;
+}

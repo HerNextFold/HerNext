@@ -34,7 +34,7 @@ describe('loadEnv', () => {
       FRONTEND_URL: 'http://localhost:5173',
     });
     expect(config.port).toBe(5000);
-    expect(config.jwtExpiresIn).toBe('3d');
+    expect(config.jwtExpiresIn).toBe('30d');
     expect(config.jwtRefreshExpiresIn).toBe('7d');
     expect(config.emailProvider).toBe('test');
     expect(config.aiProvider).toBe('groq');

@@ -18,6 +18,7 @@ import {
   insertPasswordResetToken,
 } from '../../models/password-reset.model.js';
 import {
+  deleteUserById,
   findUserByEmail,
   findUserById,
   insertParticipantProfile,
@@ -163,6 +164,26 @@ export class AuthService {
       throw new AppError(errorCodes.AUTHENTICATION_REQUIRED, 'This account is no longer available.', 401);
     }
     return toPublicUser(user);
+  }
+
+  /**
+   * Permanently deletes the authenticated participant's own account and every
+   * record that belongs to it.
+   *
+   * The id comes from the verified access token (`request.user.id`), never from
+   * the request body, so this can only ever remove the caller's own data. The
+   * child rows (profile, experiences, skills, recommendations, challenges,
+   * evidence, OTPs, password-reset tokens, ...) are removed by the schema's
+   * `ON DELETE CASCADE` constraints, which keeps the deletion atomic and
+   * respects the existing relationships instead of hand-listing tables.
+   */
+  async deleteAccount(userId: string): Promise<void> {
+    const deleted = await withTransaction((client) => deleteUserById(client, userId));
+    if (!deleted) {
+      // The token verified but the row is gone (e.g. a concurrent delete). Tell
+      // the caller the account no longer exists rather than reporting success.
+      throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Account not found', 404);
+    }
   }
 
   /**

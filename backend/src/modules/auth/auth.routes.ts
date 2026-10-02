@@ -355,6 +355,27 @@ export function registerAuthModule(app: FastifyInstance, service: AuthService): 
         },
         (request, reply) => controller.me(request, reply),
       );
+
+      scope.delete(
+        '/me',
+        {
+          preHandler: scope.authenticate,
+          schema: {
+            tags: ['Auth'],
+            summary: 'Permanently delete the authenticated user account',
+            description:
+              'Deletes the caller’s own account and all user-owned records. The user id is taken from the access token, never from the request body.',
+            operationId: 'authDeleteAccount',
+            security: bearerAuth,
+            response: {
+              200: okResponse('Account deleted', emptyDataResponse.success),
+              401: errResponse('Unauthenticated'),
+              404: errResponse('Account not found'),
+            },
+          },
+        },
+        (request, reply) => controller.deleteAccount(request, reply),
+      );
     },
     { prefix: '/api/v1/auth' },
   );

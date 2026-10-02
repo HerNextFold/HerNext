@@ -30,7 +30,7 @@ const appEnvSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(1, 'JWT_REFRESH_SECRET is required'),
   // Access-token lifetime only. The refresh token, email-verification OTP and
   // password-reset token have their own settings and are unaffected by this.
-  JWT_EXPIRES_IN: z.string().min(1).default('3d'),
+  JWT_EXPIRES_IN: z.string().min(1).default('30d'),
   JWT_REFRESH_EXPIRES_IN: z.string().min(1).default('7d'),
   FRONTEND_URL: z
     .string()

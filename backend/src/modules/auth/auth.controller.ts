@@ -47,6 +47,15 @@ export class AuthController {
     return sendOk(reply, {}, 'Logged out successfully');
   }
 
+  /**
+   * Deletes the caller's own account. The id is read from the authenticated
+   * token, so this never accepts (and cannot be pointed at) another user's id.
+   */
+  async deleteAccount(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> {
+    await this.service.deleteAccount(request.user.id);
+    return sendOk(reply, {}, 'Account deleted successfully');
+  }
+
   async forgotPassword(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> {
     const body = parseOrThrow(forgotPasswordSchema, request.body);
     const data = await this.service.requestPasswordReset(body);

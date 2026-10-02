@@ -281,6 +281,19 @@ export function getCurrentUser(): Promise<PublicUser> {
   return authRequest<PublicUser>('GET', '/auth/me')
 }
 
+/**
+ * Permanently deletes the signed-in participant's own account and every record
+ * owned by it.
+ *
+ * There is no id in this call on purpose: the backend takes the user id from the
+ * access token, so the request cannot be pointed at another account. The caller
+ * must clear its local session only after this resolves, because a rejected
+ * request means the account is still there.
+ */
+export function deleteCurrentAccount(): Promise<void> {
+  return authRequest<void>('DELETE', '/auth/me')
+}
+
 export type EmploymentType =
   | 'EMPLOYED'
   | 'SELF_EMPLOYED'
