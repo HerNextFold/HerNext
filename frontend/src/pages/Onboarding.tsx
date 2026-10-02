@@ -62,13 +62,13 @@ function mapWorkSituationToEmploymentType(workSituation: string): EmploymentType
  */
 function mapYearsExperienceToNumber(yearsExperience: string): number {
   switch (yearsExperience) {
-    case '0â€“1 years':
+    case '0–1 years':
       return 0
-    case '1â€“3 years':
+    case '1–3 years':
       return 2
-    case '3â€“5 years':
+    case '3–5 years':
       return 4
-    case '5â€“8 years':
+    case '5–8 years':
       return 6
     case '8+ years':
       return 8
@@ -339,6 +339,12 @@ export default function Onboarding() {
   // which fabricated their skill profile and drove the match score.
   const [catalogueSkills, setCatalogueSkills] = useState<CatalogueSkill[]>([])
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  /**
+   * Skills the participant typed that are not in the approved catalogue. Kept as
+   * plain names, not ids, because the backend creates the catalogue row for a
+   * genuinely new name and reuses an existing one when the name matches.
+   */
+  const [selectedCustomSkills, setSelectedCustomSkills] = useState<string[]>([])
   const [skillSearchInput, setSkillSearchInput] = useState<string>('')
   const [confidenceLevel, setConfidenceLevel] = useState<OnboardingState['skills'][number]['level']>('Intermediate')
   const [catalogueLoading, setCatalogueLoading] = useState(true)
@@ -356,6 +362,12 @@ export default function Onboarding() {
     [catalogueSkills, selectedSkillIds],
   )
 
+  /** Lower-cased names of the picked catalogue skills, for duplicate checks. */
+  const selectedCatalogueNames = useMemo(
+    () => new Set(selectedSkillNames.map((name) => name.toLowerCase())),
+    [selectedSkillNames],
+  )
+
   const skillSearchResults = useMemo(() => {
     const query = skillSearchInput.trim().toLowerCase()
     if (query === '') return []
@@ -369,6 +381,43 @@ export default function Onboarding() {
     if (selectedSkillIds.includes(skillId)) return
     setSelectedSkillIds((prev) => [...prev, skillId])
     setSkillSearchInput('')
+  }
+
+  /**
+   * Adds a skill the participant typed that is not in the approved catalogue.
+   *
+   * The suggested list is a convenience, not an allowlist: a real skill the user
+   * actually has must always be recordable, otherwise they are pushed toward
+   * claiming a near-enough substitute they do not have. The name is trimmed and
+   * de-duplicated case-insensitively against both the catalogue picks and the
+   * other custom skills, so "React" and "react" can never both be added.
+   */
+  const addCustomSkill = () => {
+    const name = skillSearchInput.trim()
+    if (name === '') return
+    const key = name.toLowerCase()
+    const alreadyChosen =
+      selectedCustomSkills.some((existing) => existing.toLowerCase() === key) ||
+      selectedCatalogueNames.has(key)
+    if (alreadyChosen) {
+      setSkillSearchInput('')
+      return
+    }
+    setSelectedCustomSkills((prev) => [...prev, name])
+    setSkillSearchInput('')
+  }
+
+  const removeCustomSkill = (name: string) => {
+    setSelectedCustomSkills((prev) => prev.filter((entry) => entry !== name))
+  }
+
+  /** Adds the top suggestion, or the typed text when nothing matches. */
+  const addSkillFromInput = () => {
+    if (skillSearchResults.length > 0) {
+      addSkill(skillSearchResults[0].id)
+      return
+    }
+    addCustomSkill()
   }
 
   const removeSkill = (skillId: string) => {
@@ -689,7 +738,7 @@ export default function Onboarding() {
 
             <h1 className="font-display text-2xl font-semibold leading-tight text-white lg:text-3xl xl:text-4xl">
               {currentStep === 1 && 'Your experience can take you further.'}
-              {currentStep === 2 && `Customizing for ${currentRole}.`}
+              {currentStep === 2 && (currentRole.trim() ? 'Your current role' : 'Tell us about your current role')}
               {currentStep === 3 && 'Mapping your transferable skills.'}
               {currentStep === 4 && 'Synthesizing your practical work.'}
               {currentStep === 5 && 'Designing your ideal career target.'}
@@ -705,12 +754,14 @@ export default function Onboarding() {
                   : 'Discover where your skills, experience, and ambitions can take you next.'}
             </p>
 
-            <div className="pt-2">
-              <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                {currentRole} Path Active
-              </span>
-            </div>
+            {currentRole.trim() && (
+              <div className="pt-2">
+                <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Current role: {currentRole}
+                </span>
+              </div>
+            )}
           </motion.div>
         </div>
       </div>
@@ -730,13 +781,13 @@ export default function Onboarding() {
                 Step {currentStep} of 7
               </span>
               <span className="font-display text-sm font-bold text-ink hidden sm:block">
-                {currentStep === 1 && '1. Welcome'}
-                {currentStep === 2 && '2. Career Right Now'}
-                {currentStep === 3 && '3. Your Skills'}
-                {currentStep === 4 && '4. Your Experience'}
-                {currentStep === 5 && '5. Your Goals'}
-                {currentStep === 6 && '6. Review & Confirmation'}
-                {currentStep === 7 && '7. AI Career Analysis'}
+                {currentStep === 1 && 'Welcome'}
+                {currentStep === 2 && 'Career Right Now'}
+                {currentStep === 3 && 'Your Skills'}
+                {currentStep === 4 && 'Your Experience'}
+                {currentStep === 5 && 'Your Goals'}
+                {currentStep === 6 && 'Review & Confirmation'}
+                {currentStep === 7 && 'AI Career Analysis'}
               </span>
             </div>
           </div>
@@ -951,6 +1002,11 @@ export default function Onboarding() {
                         <option>Media & Entertainment</option>
                         <option>Education & EdTech</option>
                       </select>
+                      <p className="mt-1.5 text-xs text-body">
+                        Your industry is used to tailor your AI impact
+                        assessment. HerNext currently recommends careers in
+                        finance, banking and fintech.
+                      </p>
                     </div>
 
                     <div>
@@ -963,10 +1019,10 @@ export default function Onboarding() {
                         className="mt-1.5 w-full rounded-xl border border-hairline bg-slate-50/50 px-3.5 py-2.5 text-sm text-ink outline-none focus:border-plum-600 focus:bg-white"
                       >
                         <option value="">Select your experience</option>
-                        <option>0â€“1 years</option>
-                        <option>1â€“3 years</option>
-                        <option>3â€“5 years</option>
-                        <option>5â€“8 years</option>
+                        <option>0–1 years</option>
+                        <option>1–3 years</option>
+                        <option>3–5 years</option>
+                        <option>5–8 years</option>
                         <option>8+ years</option>
                       </select>
                     </div>
@@ -1067,23 +1123,17 @@ export default function Onboarding() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
-                            if (skillSearchResults.length > 0) {
-                              addSkill(skillSearchResults[0].id)
-                            }
+                            addSkillFromInput()
                           }
                         }}
-                        placeholder="Search the approved HerNext skills catalogue"
+                        placeholder="Search skills, or type your own and press Enter"
                         className="w-full rounded-xl border border-hairline bg-slate-50/50 py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-plum-600 focus:bg-white"
                       />
                     </div>
                     <Button
                       variant="primary"
-                      disabled={skillSearchResults.length === 0}
-                      onClick={() => {
-                        if (skillSearchResults.length > 0) {
-                          addSkill(skillSearchResults[0].id)
-                        }
-                      }}
+                      disabled={skillSearchInput.trim() === ''}
+                      onClick={addSkillFromInput}
                       className="px-4 py-2.5 text-xs font-semibold shrink-0"
                     >
                       <Plus size={16} /> Add Skill
@@ -1099,10 +1149,22 @@ export default function Onboarding() {
                   {!catalogueError && skillSearchInput.trim() !== '' && (
                     <div className="mt-2 rounded-xl border border-hairline bg-white p-1.5 shadow-xs">
                       {skillSearchResults.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-body/70">
-                          No approved skill matches &ldquo;{skillSearchInput.trim()}&rdquo;. Pick a
-                          skill from the HerNext catalogue so it can be stored against your profile.
-                        </p>
+                        <button
+                          type="button"
+                          onClick={addCustomSkill}
+                          className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-plum-50 cursor-pointer"
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-xs font-medium text-ink truncate">
+                              Add &ldquo;{skillSearchInput.trim()}&rdquo; as your own skill
+                            </span>
+                            <span className="block text-[11px] text-body/70">
+                              Not in the suggestions? Add it anyway &mdash; we keep it on your
+                              profile.
+                            </span>
+                          </span>
+                          <Plus size={14} className="shrink-0 text-plum-700" />
+                        </button>
                       ) : (
                         skillSearchResults.map((skill) => (
                           <button
@@ -1362,7 +1424,8 @@ export default function Onboarding() {
                     </label>
                     <p className="mt-1 text-xs text-body/70">
                       Choose a career from the approved HerNext catalogue. This is stored as your
-                      target so recommendations are based on your real goal.
+                      target so recommendations are based on your real goal. The current
+                      catalogue covers finance, banking and fintech roles.
                     </p>
                     <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-hairline bg-slate-50/50 p-1.5">
                       {catalogueLoading && (
@@ -1813,7 +1876,7 @@ export default function Onboarding() {
 
         {/* STEPPER FOOTER */}
         <footer className="relative z-10 border-t border-hairline/60 py-4 text-center text-xs text-body/70">
-          256-bit encrypted &bull; Strictly confidential &bull; Step {currentStep} of 7 &bull; HerNext Inc.
+          HerNext &bull; Step {currentStep} of 7
         </footer>
       </div>
     </div>

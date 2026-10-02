@@ -16,6 +16,8 @@ export interface SkillRow {
   name: string;
   category: SkillCategory;
   description: string;
+  /** True when a participant typed this skill themselves (migration 009). */
+  isCustom: boolean;
   createdAt: Date;
 }
 
@@ -40,10 +42,17 @@ export interface CareerWithSkills extends CareerPathRow {
   skills: CareerSkillRow[];
 }
 
+/**
+ * The approved catalogue, which is what the UI offers as suggestions.
+ *
+ * Participant-typed skills live in the same table (migration 009) but are
+ * excluded here, so one person's custom skill is never suggested to anyone
+ * else.
+ */
 export async function listSkills(db: Db | undefined): Promise<SkillRow[]> {
   return queryText<SkillRow>(
     db ?? getPool(),
-    'SELECT * FROM "skills" ORDER BY "name" ASC',
+    'SELECT * FROM "skills" WHERE "isCustom" = false ORDER BY "name" ASC',
   );
 }
 
@@ -136,6 +145,49 @@ export async function findSkillsByIds(
 
 export interface SkillIdLookup {
   byId: Map<string, SkillRow>;
+}
+
+/**
+ * Resolves a participant-typed skill name to a "skills" row.
+ *
+ * An approved catalogue skill always wins, matched case-insensitively, so
+ * typing "reconciliation" reuses the seeded "Reconciliation" skill and keeps
+ * it eligible for career matching instead of creating a look-alike custom row.
+ * Only a genuinely new name is inserted, flagged "isCustom" so it is stored and
+ * displayed but never offered as a suggestion and never matched to a career.
+ *
+ * Concurrent submissions of the same new name can collide on the UNIQUE
+ * "name" constraint, so the insert falls back to a re-read of the existing row.
+ */
+export async function findOrCreateSkillByName(
+  db: Db,
+  rawName: string,
+): Promise<SkillRow> {
+  const name = rawName.trim();
+  const existing = await queryRow<SkillRow>(
+    db,
+    'SELECT * FROM "skills" WHERE lower("name") = lower($1) LIMIT 1',
+    [name],
+  );
+  if (existing !== null) {
+    return existing;
+  }
+  const created = await queryRow<SkillRow>(
+    db,
+    `INSERT INTO "skills" ("name", "category", "description", "isCustom")
+     VALUES ($1, 'SOFT_SKILLS', $2, true)
+     ON CONFLICT ("name") DO UPDATE SET "name" = EXCLUDED."name"
+     RETURNING *`,
+    [name, `Self-declared skill added by the participant: ${name}.`],
+  );
+  if (created === null) {
+    throw new AppError(
+      errorCodes.INTERNAL_SERVER_ERROR,
+      'Could not save that skill. Please try again.',
+      500,
+    );
+  }
+  return created;
 }
 
 /**

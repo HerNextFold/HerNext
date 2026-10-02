@@ -11,6 +11,15 @@ export const upsertProfileSchema = z
     careerInterests: z.array(z.string().trim().min(1).max(200)).max(20).nullable().optional(),
     targetCareerId: z.string().uuid('targetCareerId must be a valid UUID').nullable().optional(),
     skillIds: z.array(z.string().uuid('skillIds must be valid UUIDs')).max(50).optional(),
+    /**
+     * Skills the participant typed themselves that are not in the approved
+     * catalogue. Suggestions are not an allowlist, so a real skill must always
+     * be recordable. See the identical field on completeOnboardingSchema.
+     */
+    customSkills: z
+      .array(z.string().trim().min(1, 'customSkills cannot contain blank entries').max(120))
+      .max(30)
+      .optional(),
     country: z.string().trim().min(1, 'country cannot be empty').max(100).optional(),
     state: z.string().trim().min(1).max(100).nullable().optional(),
   })
@@ -65,6 +74,17 @@ export const completeOnboardingSchema = z
      * empty, but is never populated with defaults on the client's behalf.
      */
     skillIds: z.array(z.string().uuid('skillIds must be valid UUIDs')).max(50).default([]),
+    /**
+     * Skills the participant typed themselves that are not in the approved
+     * catalogue. Suggestions are not an allowlist: a real skill must always be
+     * recordable, so these are stored as custom skills and displayed on the
+     * profile. Each name is trimmed, de-duplicated case-insensitively, and
+     * resolved to an existing catalogue skill when one matches.
+     */
+    customSkills: z
+      .array(z.string().trim().min(1, 'customSkills cannot contain blank entries').max(120))
+      .max(30)
+      .optional(),
     /** Omit or leave out for a participant with no real experience to record. */
     experience: onboardingExperienceSchema.nullable().optional(),
   })

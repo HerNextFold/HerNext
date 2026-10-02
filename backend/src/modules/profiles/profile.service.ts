@@ -7,7 +7,7 @@ import {
   upsertCareerProfile,
   type CareerProfileRow,
 } from '../../models/career-profile.model.js';
-import { assertCareerExists, findCareerById, findSkillsByIds } from '../../models/catalogue.model.js';
+import { assertCareerExists, findCareerById, findOrCreateSkillByName, findSkillsByIds } from '../../models/catalogue.model.js';
 import { replaceCareerRecommendations } from '../../models/careers.model.js';
 import { insertExperience, type CreateExperienceInput } from '../../models/experience.model.js';
 import { findParticipantProfileByUserId, findUserById, updateUserLocation } from '../../models/user.model.js';
@@ -73,6 +73,8 @@ export class ProfileService {
         await this.saveSelfReportedSkills(client, userId, input.skillIds);
       }
 
+      await this.saveCustomSkills(client, userId, input.customSkills);
+
       return saved;
     });
 
@@ -124,6 +126,8 @@ export class ProfileService {
       if (input.skillIds.length > 0) {
         await this.saveSelfReportedSkills(client, userId, input.skillIds);
       }
+
+      await this.saveCustomSkills(client, userId, input.customSkills);
 
       const saved = await upsertCareerProfile(client, {
         participantProfileId: participantProfile.id,
@@ -198,6 +202,49 @@ export class ProfileService {
       await upsertUserSkill(db, {
         userId,
         skillId,
+        source: 'SELF_REPORTED',
+        confidence: 1,
+        proficiency: 0,
+      });
+    }
+  }
+
+  /**
+   * Stores skills the participant typed that are not in the approved catalogue.
+   *
+   * Suggested skills are suggestions, not an allowlist, so a genuine skill must
+   * always be recordable. Names are trimmed and de-duplicated case-insensitively
+   * (so "React" and "react" cannot both be stored), then resolved against the
+   * catalogue first: a name that matches an approved skill reuses that skill and
+   * keeps it eligible for career matching, and only a genuinely new name becomes
+   * a custom skill that is displayed but ignored by catalogue matching.
+   *
+   * Custom skills are saved with the same SELF_REPORTED source as catalogue
+   * picks, so nothing downstream treats them as verified or AI-derived.
+   */
+  private async saveCustomSkills(
+    db: Db,
+    userId: string,
+    names: readonly string[] | undefined,
+  ): Promise<void> {
+    if (names === undefined || names.length === 0) {
+      return;
+    }
+    const seen = new Set<string>();
+    for (const rawName of names) {
+      const name = rawName.trim();
+      if (name === '') {
+        continue;
+      }
+      const key = name.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      const skill = await findOrCreateSkillByName(db, name);
+      await upsertUserSkill(db, {
+        userId,
+        skillId: skill.id,
         source: 'SELF_REPORTED',
         confidence: 1,
         proficiency: 0,

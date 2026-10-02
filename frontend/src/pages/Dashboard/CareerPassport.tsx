@@ -16,7 +16,8 @@ import {
   X,
   Lightbulb,
   ExternalLink,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react';
 import PurpleBackgroundDots from '../../components/dashboard/PurpleBackgroundDots';
 import { useUserContext } from '../../context/UserContext';
@@ -85,7 +86,12 @@ export const CareerPassport: React.FC = () => {
     setGenerateError('');
     setIsGenerating(true);
     try {
-      const { passport: generated } = await generatePassport();
+      // Re-send the current visibility. The endpoint upserts on userId, so
+      // omitting isPublic would silently un-publish an already-shared passport
+      // and break the link the participant has sent to employers.
+      const { passport: generated } = await generatePassport({
+        isPublic: passport?.isPublic ?? false,
+      });
       setPassport(generated);
       setHasNoPassport(false);
     } catch (err) {
@@ -213,6 +219,16 @@ export const CareerPassport: React.FC = () => {
           {/* Action Buttons Top Right matching Figma */}
           <div className="flex items-center gap-3 shrink-0">
             <button
+              onClick={handleGeneratePassport}
+              disabled={isGenerating}
+              title="Pull in your latest roadmap progress, challenge results and new evidence"
+              className="px-4 py-2.5 rounded-xl border border-purple-200 text-xs font-bold text-[#2D1B4E] bg-white hover:bg-purple-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-60"
+            >
+              <RefreshCw size={14} className={isGenerating ? 'animate-spin' : 'text-[#8C3F96]'} />
+              <span>{isGenerating ? 'Refreshing...' : 'Refresh Passport'}</span>
+            </button>
+
+            <button
               onClick={() => setShowShareModal(true)}
               className="px-4 py-2.5 rounded-xl border border-purple-200 text-xs font-bold text-[#2D1B4E] bg-white hover:bg-purple-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
@@ -236,9 +252,9 @@ export const CareerPassport: React.FC = () => {
           </div>
         )}
 
-        {loadError && (
+        {(loadError || generateError) && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-            {loadError}
+            {loadError || generateError}
           </div>
         )}
 
@@ -253,12 +269,6 @@ export const CareerPassport: React.FC = () => {
                 Generate your verified profile, skills, experience, and evidence into one shareable credential.
               </p>
             </div>
-
-            {generateError && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 max-w-md mx-auto">
-                {generateError}
-              </div>
-            )}
 
             <button
               onClick={handleGeneratePassport}

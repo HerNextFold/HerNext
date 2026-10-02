@@ -46,6 +46,10 @@ export default function Hero() {
           <p className="mt-5 text-xs text-body/80">
             Built for women navigating the changing world of work.
           </p>
+          <p className="mt-2 text-xs text-body/80">
+            This programme currently focuses on careers in finance, banking
+            and fintech.
+          </p>
         </motion.div>
 
         <motion.div
