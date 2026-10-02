@@ -332,11 +332,14 @@ export default function Onboarding() {
 
   // Step 3 Skills State
   //
-  // Skills are stored as APPROVED CATALOGUE ids. The backend refuses to
-  // persist free text as a skill (docs/AGENTS.md Â§16), so the participant
-  // picks from the real catalogue. Nothing is pre-selected: the previous
-  // behaviour auto-selected six preset skills the participant never chose,
-  // which fabricated their skill profile and drove the match score.
+  // Catalogue picks are stored as APPROVED CATALOGUE ids (docs/AGENTS.md A16).
+  // Nothing is pre-selected: the previous behaviour auto-selected six preset
+  // skills the participant never chose, which fabricated their skill profile
+  // and drove the match score.
+  //
+  // The catalogue is a set of SUGGESTIONS, not an allowlist. A participant who
+  // holds a real skill that is not catalogued records it in
+  // selectedCustomSkills, which the backend persists as a custom skill.
   const [catalogueSkills, setCatalogueSkills] = useState<CatalogueSkill[]>([])
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
   /**
@@ -554,6 +557,9 @@ export default function Onboarding() {
         careerInterests: nextChapterPriorities,
         targetCareerId,
         skillIds: selectedSkillIds,
+        // Skills typed by the participant that are not in the catalogue. Sent
+        // alongside the catalogue ids so both kinds of skill are recorded.
+        customSkills: selectedCustomSkills,
         // Only record an experience when the participant actually described
         // one. Otherwise nothing is stored - no placeholder job history.
         experience:
@@ -1187,22 +1193,25 @@ export default function Onboarding() {
                 <div className="rounded-2xl border border-hairline bg-slate-50/60 p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-ink">
-                      Your Selected Skills ({selectedSkillIds.length})
+                      Your Selected Skills ({selectedSkillIds.length + selectedCustomSkills.length})
                     </span>
-                    {selectedSkillIds.length > 0 && (
+                    {(selectedSkillIds.length > 0 || selectedCustomSkills.length > 0) && (
                       <button
                         type="button"
-                        onClick={() => setSelectedSkillIds([])}
+                        onClick={() => {
+                          setSelectedSkillIds([])
+                          setSelectedCustomSkills([])
+                        }}
                         className="text-[11px] text-rose-600 hover:underline"
                       >
                         Clear all
                       </button>
                     )}
                   </div>
-                  {selectedSkillIds.length === 0 && (
+                  {selectedSkillIds.length === 0 && selectedCustomSkills.length === 0 && (
                     <p className="pt-1 text-xs text-body/70">
                       No skills selected yet. Add the skills you genuinely have - nothing is selected
-                      for you.
+                      for you. Suggestions are a starting point, not a limit.
                     </p>
                   )}
                   <div className="flex flex-wrap gap-2 pt-1">
@@ -1220,6 +1229,25 @@ export default function Onboarding() {
                               catalogueSkills.find((item) => item.name === skill)?.id ?? '',
                             )
                           }
+                          className="rounded-full p-0.5 hover:bg-plum-200 text-plum-800"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedCustomSkills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-plum-300 bg-white px-3 py-1 text-xs font-semibold text-plum-900 shadow-2xs"
+                      >
+                        {skill}
+                        <span className="rounded-full bg-plum-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-plum-700">
+                          Your own
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${skill}`}
+                          onClick={() => removeCustomSkill(skill)}
                           className="rounded-full p-0.5 hover:bg-plum-200 text-plum-800"
                         >
                           <X size={12} />

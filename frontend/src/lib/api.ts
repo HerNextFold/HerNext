@@ -402,6 +402,14 @@ export interface CompleteOnboardingPayload {
   /** Approved catalogue skill ids the participant actually reported. */
   skillIds: string[]
   /**
+   * Skills the participant typed that are not in the approved catalogue.
+   * Suggestions are not an allowlist, so a genuine skill must always be
+   * recordable. The backend trims these, ignores blank entries, de-duplicates
+   * case-insensitively, and reuses an approved catalogue skill when the name
+   * matches one.
+   */
+  customSkills?: string[]
+  /**
    * Omit (or send null) when the participant has no genuine experience to
    * record. The backend inserts nothing in that case - no placeholder or
    * invented employment history is ever created.
