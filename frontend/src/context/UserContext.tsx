@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { SESSION_ENDED_EVENT, USER_SESSION_KEY } from '../lib/session';
-
+import { getProfile, type CareerProfile } from '../lib/api';
 export interface SkillProficiency {
   name: string;
   level: 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
@@ -33,6 +33,10 @@ interface UserContextType {
   user: UserProfile;
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   onboarding: OnboardingState;
+  careerProfile: CareerProfile | null;
+  isCareerProfileLoading: boolean;
+  refreshCareerProfile: () => Promise<CareerProfile>;
+  setCareerProfile: React.Dispatch<React.SetStateAction<CareerProfile | null>>;
   setOnboarding: React.Dispatch<React.SetStateAction<OnboardingState>>;
   updateUser: (updates: Partial<UserProfile>) => void;
   updateOnboarding: (updates: Partial<OnboardingState>) => void;
@@ -72,6 +76,8 @@ const DEFAULT_ONBOARDING: OnboardingState = {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [careerProfile, setCareerProfile] = useState<CareerProfile | null>(null);
+  const [isCareerProfileLoading, setIsCareerProfileLoading] = useState(false);
   const [user, setUser] = useState<UserProfile>(() => {
     try {
       const saved = localStorage.getItem(USER_SESSION_KEY);
@@ -104,6 +110,26 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     return DEFAULT_ONBOARDING;
   });
+
+  const refreshCareerProfile = useCallback(async (): Promise<CareerProfile> => {
+    setIsCareerProfileLoading(true);
+    try {
+      const profile = await getProfile();
+      setCareerProfile(profile);
+      return profile;
+    } finally {
+      setIsCareerProfileLoading(false);
+    }
+  }, []);
+
+  // Rehydrate the backend profile on startup when an authenticated session exists.
+  useEffect(() => {
+    if (!localStorage.getItem('accessToken')) return;
+    void refreshCareerProfile().catch((error) => {
+      setCareerProfile(null);
+      console.warn('Failed to load career profile from the backend', error);
+    });
+  }, [refreshCareerProfile]);
 
   // Save to localStorage whenever user or onboarding state changes
   useEffect(() => {
@@ -165,6 +191,10 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         user,
         setUser,
         onboarding,
+        careerProfile,
+        isCareerProfileLoading,
+        refreshCareerProfile,
+        setCareerProfile,
         setOnboarding,
         updateUser,
         updateOnboarding,

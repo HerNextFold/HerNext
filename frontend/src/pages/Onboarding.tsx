@@ -291,7 +291,7 @@ const DEFAULT_PRESET: RolePreset = {
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const { onboarding, updateOnboarding } = useUserContext()
+  const { onboarding, updateOnboarding, setCareerProfile } = useUserContext()
   const [currentStep, setCurrentStep] = useState<number>(1)
 
   // Step 2 Form State
@@ -341,29 +341,41 @@ export default function Onboarding() {
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [experienceError, setExperienceError] = useState('')
+  const [profileSaved, setProfileSaved] = useState(false)
 
   const handleFinishOnboarding = async () => {
     if (isSubmitting) return
     setSubmitError('')
+    setExperienceError('')
+    setProfileSaved(false)
     setIsSubmitting(true)
 
     const employmentType = mapWorkSituationToEmploymentType(workSituation)
     const yearsOfExperience = mapYearsExperienceToNumber(yearsExperience)
 
     try {
-      await updateProfile({
+      const savedProfile = await updateProfile({
         currentOccupation: currentRole,
         industry,
         yearsOfExperience,
         employmentType,
         education,
       })
+      setCareerProfile(savedProfile)
+      setProfileSaved(true)
 
-      await createExperience({
-        title: currentRole,
-        description: practicalExperience,
-        employmentType,
-      })
+      try {
+        await createExperience({
+          title: currentRole,
+          description: practicalExperience,
+          employmentType,
+        })
+      } catch (err) {
+        setExperienceError(err instanceof ApiError ? err.message : 'Your profile was saved, but your experience could not be saved. Please try again.')
+        setIsSubmitting(false)
+        return
+      }
 
       updateOnboarding({
         currentRole,
@@ -1535,6 +1547,11 @@ export default function Onboarding() {
                     {submitError && (
                       <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
                         {submitError}
+                      </div>
+                    )}
+                    {profileSaved && experienceError && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                        Your profile was saved. Your experience could not be saved: {experienceError}
                       </div>
                     )}
 
