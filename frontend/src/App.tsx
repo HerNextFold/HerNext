@@ -26,6 +26,7 @@ import CreateCareerPathPage from './pages/Dashboard/CreateCareerPath'
 import { DashboardProvider } from './context/DashboardContext'
 import { UserProvider } from './context/UserContext'
 import RequireAuth from './components/auth/RequireAuth'
+import RequireOnboarding from './components/auth/RequireOnboarding'
 
 function App() {
   return (
@@ -50,24 +51,28 @@ function App() {
             {/* Onboarding Flow (Post SignUp) */}
             <Route path="/onboarding" element={<Onboarding />} />
 
-            {/* Protected Dashboard Views */}
-            <Route path="/dashboard" element={<DashboardProvider><Dashboard /></DashboardProvider>}>
-              <Route index element={<Navigate to="insights" replace />} />
-              <Route path="insights" element={<CareerInsights />} />
-              <Route path="overview" element={<Overview />} />
-              <Route path="history" element={<History />} />
-              <Route path="assessment" element={<CareerAssessment />} />
-              <Route path="skills" element={<CareerSkills />} />
-              <Route path="path" element={<CareerPath />} />
-              <Route path="career-paths/new" element={<CreateCareerPathPage />} />
-              <Route path="roadmap" element={<CareerRoadmap />} />
-              <Route path="roadmap/overview" element={<LessonOverview />} />
-              <Route path="roadmap/learn" element={<CourseContent />} />
-              <Route path="profile" element={<Profile />} />
-              <Route path="challenges" element={<Challenges />} />
-              <Route path="challenges/:id" element={<ChallengeDetail />} />
-              <Route path="passport" element={<CareerPassport />} />
-              <Route path="settings" element={<SettingsPage />} />
+            {/* The dashboard additionally requires a completed onboarding, checked
+                against the server rather than anything cached in the browser. */}
+            <Route element={<RequireOnboarding />}>
+              {/* Protected Dashboard Views */}
+              <Route path="/dashboard" element={<DashboardProvider><Dashboard /></DashboardProvider>}>
+                <Route index element={<Navigate to="insights" replace />} />
+                <Route path="insights" element={<CareerInsights />} />
+                <Route path="overview" element={<Overview />} />
+                <Route path="history" element={<History />} />
+                <Route path="assessment" element={<CareerAssessment />} />
+                <Route path="skills" element={<CareerSkills />} />
+                <Route path="path" element={<CareerPath />} />
+                <Route path="career-paths/new" element={<CreateCareerPathPage />} />
+                <Route path="roadmap" element={<CareerRoadmap />} />
+                <Route path="roadmap/overview" element={<LessonOverview />} />
+                <Route path="roadmap/learn" element={<CourseContent />} />
+                <Route path="profile" element={<Profile />} />
+                <Route path="challenges" element={<Challenges />} />
+                <Route path="challenges/:id" element={<ChallengeDetail />} />
+                <Route path="passport" element={<CareerPassport />} />
+                <Route path="settings" element={<SettingsPage />} />
+              </Route>
             </Route>
           </Route>
         </Routes>

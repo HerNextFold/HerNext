@@ -153,13 +153,29 @@ const Challenges: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="text-sm font-black text-[#2D1B4E] leading-snug">{challenge.title}</h3>
-                    <span
-                      className={`shrink-0 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${DIFFICULTY_STYLES[challenge.difficulty]}`}
-                    >
-                      {challenge.difficulty}
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span
+                        className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${DIFFICULTY_STYLES[challenge.difficulty]}`}
+                      >
+                        {challenge.difficulty}
+                      </span>
+                      {challenge.relevance !== 'EXPLORING' && (
+                        <span
+                          className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                            challenge.relevance === 'RECOMMENDED'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-sky-50 text-sky-700 border-sky-200'
+                          }`}
+                        >
+                          {challenge.relevance === 'RECOMMENDED' ? 'For your goal' : 'Uses your skills'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">{challenge.description}</p>
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                    {challenge.relevanceReason}
+                  </p>
                   {challenge.skills.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {challenge.skills.map((skill) => (

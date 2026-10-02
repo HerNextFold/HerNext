@@ -96,9 +96,20 @@ const transferableSkillsResponseSchema = {
 
 const recommendationsResponseSchema = {
   type: 'object',
-  required: ['recommendations'],
+  required: ['status', 'missing', 'recommendations'],
   additionalProperties: false,
   properties: {
+    status: {
+      type: 'string',
+      enum: ['READY', 'INSUFFICIENT_DATA'],
+      description:
+        'READY when the participant data separated the careers. INSUFFICIENT_DATA when every catalogue entry scored identically, so no honest ranking exists and recommendations is empty.',
+    },
+    missing: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Deterministic list of participant inputs still required. Empty when READY.',
+    },
     recommendations: {
       type: 'array',
       items: {

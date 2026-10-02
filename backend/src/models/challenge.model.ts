@@ -73,6 +73,65 @@ export interface ChallengeWithSkills extends ChallengeRow {
   skills: Array<{ skillId: string; skillName: string }>;
 }
 
+export interface ChallengeRelevanceRow {
+  challengeId: string;
+  /** Skills the challenge builds that the participant's target career also requires. */
+  targetSkillNames: string[];
+  /** Skills the challenge builds that the participant already has. */
+  existingSkillNames: string[];
+}
+
+/**
+ * Scores each challenge's relevance to one participant, from existing tables only.
+ *
+ * There is no challenge-to-career table in the schema, so relevance is derived
+ * through `challenge_skills`, which links every challenge to the approved skills
+ * it builds. Two overlaps are counted:
+ *
+ *   - target: the challenge builds a skill the participant's `targetCareerId`
+ *     requires (`career_skills`). This is the strong signal - the challenge
+ *     produces evidence for the career they are actually moving toward.
+ *   - existing: the challenge builds a skill they already hold (`user_skills`).
+ *     A weaker signal - it plays to strengths they can already demonstrate.
+ *
+ * Nothing is invented and no catalogue row is filtered out: this only annotates
+ * and orders the list. `targetCareerId` may be null, in which case only the
+ * `existing` overlap is counted.
+ */
+export async function listChallengeRelevance(
+  db: Db | undefined,
+  userId: string,
+  targetCareerId: string | null,
+  challengeIds: string[],
+): Promise<ChallengeRelevanceRow[]> {
+  if (challengeIds.length === 0) {
+    return [];
+  }
+  return queryText<ChallengeRelevanceRow>(
+    db ?? getPool(),
+    `SELECT cs."challengeId",
+            COALESCE(
+              array_agg(DISTINCT s."name") FILTER (WHERE tgt."skillId" IS NOT NULL),
+              ARRAY[]::text[]
+            ) AS "targetSkillNames",
+            COALESCE(
+              array_agg(DISTINCT s."name") FILTER (WHERE own."skillId" IS NOT NULL),
+              ARRAY[]::text[]
+            ) AS "existingSkillNames"
+     FROM "challenge_skills" cs
+     JOIN "skills" s ON s."id" = cs."skillId"
+     LEFT JOIN "career_skills" tgt
+       ON tgt."skillId" = cs."skillId"
+      AND tgt."careerPathId" = $1::uuid
+     LEFT JOIN "user_skills" own
+       ON own."skillId" = cs."skillId"
+      AND own."userId" = $2::uuid
+     WHERE cs."challengeId" = ANY($3::uuid[])
+     GROUP BY cs."challengeId"`,
+    [targetCareerId, userId, challengeIds],
+  );
+}
+
 /** Interface shared by challenge list responses so skills are attached once. */
 export function attachSkills(
   challenges: ChallengeRow[],

@@ -78,7 +78,12 @@ const CareerAssessment: React.FC = () => {
 
         const experience = experiences[0];
         if (!experience) {
-          setLoadError('Add your work experience in Onboarding to unlock your personalized AI Career Assessment.');
+          // Onboarding makes experience optional and, once completed, redirects
+          // away from the onboarding flow - so pointing there would dead-end.
+          // Profile is where an experience can be added at any time.
+          setLoadError(
+            'This assessment reads the responsibilities in a work experience record, so it needs one before it can run. Add your real work experience on your Profile page and this will unlock.',
+          );
           return;
         }
 
@@ -191,8 +196,15 @@ const CareerAssessment: React.FC = () => {
       </motion.div>
 
       {loadError && (
-        <motion.div variants={item} className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-          {loadError}
+        <motion.div variants={item} className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 space-y-2">
+          <p>{loadError}</p>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/profile')}
+            className="font-semibold underline hover:text-rose-900"
+          >
+            Go to my Profile
+          </button>
         </motion.div>
       )}
 

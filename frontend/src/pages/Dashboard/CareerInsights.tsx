@@ -67,6 +67,14 @@ const CareerInsights: React.FC = () => {
 
   const [profile, setProfile] = useState<CareerProfile | null>(null);
   const [recommendations, setRecommendations] = useState<CareerRecommendation[]>([]);
+  /**
+   * Set when the backend declined to rank careers because the participant's own
+   * data could not tell two careers apart. The list is then empty on purpose and
+   * `missingReasons` explains what is needed. No catalogue career is ever
+   * substituted for a real recommendation.
+   */
+  const [insufficientData, setInsufficientData] = useState(false);
+  const [missingReasons, setMissingReasons] = useState<string[]>([]);
   const [summary, setSummary] = useState<ProgressSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -87,6 +95,8 @@ const CareerInsights: React.FC = () => {
 
         setProfile(profileData);
         setRecommendations(recs.recommendations);
+        setInsufficientData(recs.status === 'INSUFFICIENT_DATA');
+        setMissingReasons(recs.missing ?? []);
         setSummary(summaryData);
 
         if (profileData) {
@@ -616,6 +626,31 @@ const CareerInsights: React.FC = () => {
                 </div>
               </motion.div>
             ))}
+          </div>
+        ) : insufficientData ? (
+          <div className="bg-white rounded-3xl p-6 border border-purple-100 shadow-sm">
+            <h3 className="text-sm font-bold text-[#2D1B4E] mb-1.5">
+              We can&rsquo;t rank careers yet
+            </h3>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Your profile doesn&rsquo;t contain enough information yet for a career to score
+              better than another, so we&rsquo;re not going to show you an arbitrary one. Add the
+              following and your matches will be calculated from your real data:
+            </p>
+            <ul className="mt-3 space-y-1.5">
+              {missingReasons.map((reason) => (
+                <li key={reason} className="flex items-start gap-2 text-xs text-gray-700">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#8C3F96]" />
+                  {reason}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={() => navigate('/onboarding')}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#2D1B4E] px-4 py-2 text-xs font-semibold text-white hover:bg-[#8C3F96] transition-colors"
+            >
+              Complete your profile
+            </button>
           </div>
         ) : (
           <div className="bg-white rounded-3xl p-6 border border-purple-100 shadow-sm text-xs text-gray-600">

@@ -5,8 +5,8 @@ import AuthLayout from '../components/auth/AuthLayout'
 import GoogleButton from '../components/auth/GoogleButton'
 import Button from '../components/Button'
 import { useUserContext, formatNameFromEmail } from '../context/UserContext'
-import { ApiError, loginUser } from '../lib/api'
-import { ACCESS_TOKEN_KEY, buildReturnUrl } from '../lib/session'
+import { getOnboardingStatus, ApiError, loginUser } from '../lib/api'
+import { buildReturnUrl, startSession } from '../lib/session'
 
 export default function SignIn() {
   const navigate = useNavigate()
@@ -47,15 +47,28 @@ export default function SignIn() {
 
     try {
       const { user, accessToken } = await loginUser({ email: cleanEmail, password })
-      localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
+      // startSession clears any previous participant's token and cached
+      // user/onboarding state before storing the new one, so a shared browser
+      // cannot leak one account's answers into another's session.
+      startSession(accessToken)
       updateUser({
         email: user.email,
         fullName: `${user.firstName} ${user.lastName}`.trim() || formatNameFromEmail(user.email),
         country: user.country,
         state: user.state ?? '',
       })
-      // Returns the participant to the page their session expired on.
-      navigate(buildReturnUrl(searchParams.get('next')))
+      // PHASE 6: the server owns the answer to "does this account still need
+      // onboarding?". Ask it rather than trusting anything cached, and send a
+      // brand new account straight to onboarding.
+      let destination = buildReturnUrl(searchParams.get('next'))
+      try {
+        const { completed } = await getOnboardingStatus()
+        if (!completed) destination = '/onboarding'
+      } catch {
+        // If the status call fails, fall back to the normal return path rather
+        // than trapping the participant on a sign-in page they cannot leave.
+      }
+      navigate(destination)
     } catch (err) {
       if (err instanceof ApiError && err.code === 'ACCOUNT_UNVERIFIED') {
         setUnverifiedEmail(cleanEmail)

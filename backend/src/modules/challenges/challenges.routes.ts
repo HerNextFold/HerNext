@@ -23,9 +23,20 @@ const challengesQuerySchema = {
   },
 } as const;
 
+const CHALLENGE_RELEVANCE_LEVELS = ['RECOMMENDED', 'BUILDING', 'EXPLORING'] as const;
+
 const challengeListItemSchema = {
   type: 'object',
-  required: ['id', 'title', 'description', 'difficulty', 'skills', 'latestAttempt'],
+  required: [
+    'id',
+    'title',
+    'description',
+    'difficulty',
+    'skills',
+    'relevance',
+    'relevanceReason',
+    'latestAttempt',
+  ],
   additionalProperties: false,
   properties: {
     id: uuidSchema(),
@@ -44,6 +55,13 @@ const challengeListItemSchema = {
         },
       },
     },
+    relevance: {
+      type: 'string',
+      enum: [...CHALLENGE_RELEVANCE_LEVELS],
+      description:
+        'Backend-computed from challenge_skills: RECOMMENDED builds a skill the target career requires, BUILDING builds a skill the participant already has, EXPLORING has no overlap. Every catalogue challenge is always returned; this only orders and labels them.',
+    },
+    relevanceReason: { type: 'string' },
     latestAttempt: {
       type: ['object', 'null'],
       required: ['status', 'score', 'submittedAt'],

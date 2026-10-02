@@ -17,6 +17,8 @@ import { ExperienceService } from './modules/experiences/experiences.service.js'
 import { registerExperienceModule } from './modules/experiences/experiences.routes.js';
 import { ProfileService } from './modules/profiles/profile.service.js';
 import { registerProfileModule } from './modules/profiles/profile.routes.js';
+import { CatalogueService } from './modules/catalogue/catalogue.service.js';
+import { registerCatalogueModule } from './modules/catalogue/catalogue.routes.js';
 import { AiService } from './modules/ai/ai.service.js';
 import { registerAiModule } from './modules/ai/ai.routes.js';
 import { AchievementService } from './modules/achievements/achievements.service.js';
@@ -75,6 +77,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   registerExperienceModule(app, experienceService);
 
   registerProfileModule(app, new ProfileService());
+  registerCatalogueModule(app, new CatalogueService());
 
   // Provider selection is configuration-driven (docs/AI_SPEC.md §16). All
   // providers implement the same LLMProvider interface, so the AI service

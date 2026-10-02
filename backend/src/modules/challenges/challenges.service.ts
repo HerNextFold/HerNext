@@ -5,10 +5,14 @@ import { evaluateChallengeSubmission, findChallengeSpec } from '../../lib/challe
 import {
   attachSkills,
   findChallengeById,
+  listChallengeRelevance,
   listChallenges as listChallengesInDb,
   listChallengeSkills,
   type ChallengeDifficulty,
+  type ChallengeRelevanceRow,
+  type ChallengeWithSkills,
 } from '../../models/challenge.model.js';
+import { findCareerProfileByUserId } from '../../models/career-profile.model.js';
 import {
   insertSubmission,
   listLatestSubmissions,
@@ -19,12 +23,16 @@ import { upsertUserSkill } from '../../models/user-skill.model.js';
 import { parseOrThrow } from '../../common/utils/validate.js';
 import type { AchievementService } from '../achievements/achievements.service.js';
 
+export type ChallengeRelevance = 'RECOMMENDED' | 'BUILDING' | 'EXPLORING';
+
 export interface ChallengeListItem {
   id: string;
   title: string;
   description: string;
   difficulty: ChallengeDifficulty;
   skills: Array<{ skillId: string; skillName: string }>;
+  relevance: ChallengeRelevance;
+  relevanceReason: string;
   latestAttempt: { status: SubmissionStatus; score: number | null; submittedAt: Date } | null;
 }
 
@@ -34,6 +42,61 @@ export interface SubmitChallengeResult {
   score: number;
   feedback: string;
   evidenceCreated: number;
+}
+
+const RELEVANCE_RANK: Record<ChallengeRelevance, number> = {
+  RECOMMENDED: 0,
+  BUILDING: 1,
+  EXPLORING: 2,
+};
+
+/**
+ * Human-readable, data-derived explanation. Never claims a match that is not
+ * actually there.
+ */
+function describeRelevance(
+  relevance: ChallengeRelevance,
+  targetSkills: string[],
+  existingSkills: string[],
+): string {
+  if (relevance === 'RECOMMENDED') {
+    return `Builds ${targetSkills.join(', ')}, which your target career requires. Completing it produces evidence for that career.`;
+  }
+  if (relevance === 'BUILDING') {
+    return `Builds on ${existingSkills.join(', ')}, which you already have. A quick way to show what you can already do.`;
+  }
+  return 'Not yet connected to your profile or target career. Included so you can explore beyond your current plan.';
+}
+
+/**
+ * Combines a challenge, its skills, its relevance row and its latest attempt
+ * into the API shape. Shared by `list` and `getById` so the single-challenge
+ * response cannot drift from the list response.
+ */
+function buildListItem(
+  challenge: ChallengeWithSkills,
+  relevanceRow: ChallengeRelevanceRow | undefined,
+  attempt: { status: SubmissionStatus; score: number | null; submittedAt: Date } | undefined,
+): ChallengeListItem {
+  const targetSkills = relevanceRow?.targetSkillNames ?? [];
+  const existingSkills = relevanceRow?.existingSkillNames ?? [];
+  // Target overlap wins: evidence for the career they are moving toward is more
+  // useful than playing to a strength they already have.
+  const relevance: ChallengeRelevance =
+    targetSkills.length > 0
+      ? 'RECOMMENDED'
+      : existingSkills.length > 0
+        ? 'BUILDING'
+        : 'EXPLORING';
+  return {
+    ...challenge,
+    relevance,
+    relevanceReason: describeRelevance(relevance, targetSkills, existingSkills),
+    latestAttempt:
+      attempt === undefined
+        ? null
+        : { status: attempt.status, score: attempt.score, submittedAt: attempt.submittedAt },
+  };
 }
 
 export class ChallengeService {
@@ -47,20 +110,29 @@ export class ChallengeService {
     if (challenges.length === 0) {
       return [];
     }
-    const skillRows = await listChallengeSkills(getPool(), challenges.map((c) => c.id));
-    const latestAttempts = await listLatestSubmissions(getPool(), userId);
+    const challengeIds = challenges.map((c) => c.id);
+    // A participant who has not finished onboarding has no target career, so
+    // every challenge is EXPLORING for them. That is the honest answer, and the
+    // catalogue is still fully browsable.
+    const profile = await findCareerProfileByUserId(getPool(), userId);
+    const targetCareerId = profile?.targetCareerId ?? null;
+    const [skillRows, latestAttempts, relevanceRows] = await Promise.all([
+      listChallengeSkills(getPool(), challengeIds),
+      listLatestSubmissions(getPool(), userId),
+      listChallengeRelevance(getPool(), userId, targetCareerId, challengeIds),
+    ]);
     const byChallenge = new Map(latestAttempts.map((a) => [a.challengeId, a]));
+    const relevanceByChallenge = new Map(relevanceRows.map((r) => [r.challengeId, r]));
 
-    return attachSkills(challenges, skillRows).map((challenge) => {
-      const attempt = byChallenge.get(challenge.id);
-      return {
-        ...challenge,
-        latestAttempt:
-          attempt === undefined
-            ? null
-            : { status: attempt.status, score: attempt.score, submittedAt: attempt.submittedAt },
-      };
-    });
+    return attachSkills(challenges, skillRows)
+      .map((challenge) =>
+        buildListItem(challenge, relevanceByChallenge.get(challenge.id), byChallenge.get(challenge.id)),
+      )
+      .sort((a, b) => {
+        const byRelevance = RELEVANCE_RANK[a.relevance] - RELEVANCE_RANK[b.relevance];
+        // Title is the tiebreak so the order is stable across requests.
+        return byRelevance !== 0 ? byRelevance : a.title.localeCompare(b.title);
+      });
   }
 
   async getById(userId: string, challengeId: string): Promise<ChallengeListItem> {
@@ -69,6 +141,10 @@ export class ChallengeService {
       throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Challenge not found', 404);
     }
     const skillRows = await listChallengeSkills(getPool(), [challenge.id]);
+    const profile = await findCareerProfileByUserId(getPool(), userId);
+    const relevanceRows = await listChallengeRelevance(getPool(), userId, profile?.targetCareerId ?? null, [
+      challenge.id,
+    ]);
     const attempt = (await listLatestSubmissions(getPool(), userId)).find(
       (a) => a.challengeId === challenge.id,
     );
@@ -76,13 +152,7 @@ export class ChallengeService {
     if (item === undefined) {
       throw new AppError(errorCodes.INTERNAL_SERVER_ERROR, 'Could not load challenge.', 500);
     }
-    return {
-      ...item,
-      latestAttempt:
-        attempt === undefined
-          ? null
-          : { status: attempt.status, score: attempt.score, submittedAt: attempt.submittedAt },
-    };
+    return buildListItem(item, relevanceRows[0], attempt);
   }
 
   /**

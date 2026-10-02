@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto';
+﻿import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { loadEnv } from '../src/config/env.js';
 import { checkDatabaseConnection, closeDb, getPool, initDb, queryRow, queryText } from '../src/lib/db.js';
 import { deleteUserByEmail, type UserRow } from '../src/models/user.model.js';
+import { listCareerRecommendationsWithName } from '../src/models/careers.model.js';
 import { updateExperience } from '../src/models/experience.model.js';
 import { AiService } from '../src/modules/ai/ai.service.js';
 import { LLMProviderError, type LLMProvider } from '../src/modules/ai/providers/llm.provider.js';
@@ -12,7 +13,7 @@ import { readLatestOtp } from './helpers/auth.js';
 
 // These tests exercise AI service behaviour against a real database (Neon)
 // with a mocked LLM provider, so the normal test suite never needs a live AI
-// provider (docs/AGENTS.md §37). Run with npm run test:db.
+// provider (docs/AGENTS.md Â§37). Run with npm run test:db.
 const runDbTests = process.env.RUN_DB_TESTS === '1';
 
 const PASSWORD = 'SecurePassword123!';
@@ -242,19 +243,127 @@ describe.runIf(runDbTests)('AI service (integration, mocked provider)', () => {
     });
   });
 
-  it('computes career recommendations and persists them ranked', async () => {
+  it('reports INSUFFICIENT_DATA instead of an arbitrary ranking when nothing can discriminate', async () => {
+    // An experience alone cannot rank careers: the experience component is
+    // career-agnostic, so with no stored skills and no target career every
+    // catalogue entry scores the same. The backend must say so instead of
+    // returning the alphabetically first career as the top match.
     const { user, token } = await registerUser(app);
     await createExperience(app, token);
 
-    const recommendations = await service.runCareerRecommendations(user.id);
-    expect(recommendations.length).toBeGreaterThan(0);
+    const result = await service.runCareerRecommendations(user.id);
+    expect(result.status).toBe('INSUFFICIENT_DATA');
+    expect(result.recommendations).toEqual([]);
+    expect(result.missing.length).toBeGreaterThan(0);
+
+    // Nothing may be persisted, or a later read would treat the empty ranking
+    // as authoritative.
+    const stored = await listCareerRecommendationsWithName(getPool(), user.id);
+    expect(stored).toEqual([]);
+  });
+
+  it('ranks careers from the participant\'s own skills and target career', async () => {
+    const { user, token } = await registerUser(app);
+    await createExperience(app, token);
+
+    const skills = await queryText<{ id: string; name: string }>(
+      getPool(),
+      'SELECT "id", "name" FROM "skills" ORDER BY "name" ASC LIMIT 3',
+    );
+    const careers = await queryText<{ id: string; name: string }>(
+      getPool(),
+      'SELECT "id", "name" FROM "career_paths" ORDER BY "name" ASC LIMIT 2',
+    );
+    expect(skills.length).toBeGreaterThan(0);
+    expect(careers.length).toBeGreaterThan(0);
+    const targetCareerId = careers[0]!.id;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/onboarding',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        currentOccupation: 'Software Developer',
+        industry: 'Technology & Software',
+        yearsOfExperience: 4,
+        employmentType: 'EMPLOYED',
+        targetCareerId,
+        skillIds: skills.map((s) => s.id),
+        experience: {
+          title: 'Software Developer',
+          description: 'Built and shipped customer-facing web applications end to end.',
+          employmentType: 'EMPLOYED',
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const result = await service.runCareerRecommendations(user.id);
+    expect(result.status).toBe('READY');
+    expect(result.missing).toEqual([]);
+    expect(result.recommendations.length).toBeGreaterThan(0);
+
     // Ranks are 1..N in score order.
-    const ranks = recommendations.map((r) => r.rank);
+    const ranks = result.recommendations.map((r) => r.rank);
     expect(ranks).toEqual(Array.from({ length: ranks.length }, (_, i) => i + 1));
 
-    const scores = recommendations.map((r) => r.matchScore);
+    // Scores are non-increasing, and a real ranking has more than one distinct
+    // score - otherwise the data could not tell the careers apart.
+    const scores = result.recommendations.map((r) => r.matchScore);
     expect(scores.slice().sort((a, b) => b - a)).toEqual(scores);
+    expect(new Set(scores).size).toBeGreaterThan(1);
+
+    // The participant's declared target must be ranked first, because the
+    // scorer is now actually reading their targetCareerId.
+    expect(result.recommendations[0]!.careerId).toBe(targetCareerId);
   });
+
+  it('orders equally scored careers deterministically by name, not by chance', async () => {
+    const { user, token } = await registerUser(app);
+    await createExperience(app, token);
+    const skills = await queryText<{ id: string }>(
+      getPool(),
+      'SELECT "id" FROM "skills" ORDER BY "name" ASC LIMIT 1',
+    );
+    const careers = await queryText<{ id: string; name: string }>(
+      getPool(),
+      'SELECT "id", "name" FROM "career_paths" ORDER BY "name" ASC LIMIT 1',
+    );
+    expect(skills.length).toBeGreaterThan(0);
+    expect(careers.length).toBeGreaterThan(0);
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/onboarding',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        currentOccupation: 'Product Designer',
+        industry: 'Technology & Software',
+        yearsOfExperience: 2,
+        employmentType: 'EMPLOYED',
+        targetCareerId: careers[0]!.id,
+        skillIds: skills.map((s) => s.id),
+      },
+    });
+
+    const first = await service.runCareerRecommendations(user.id);
+    const second = await service.runCareerRecommendations(user.id);
+    expect(first.recommendations.map((r) => r.careerId)).toEqual(
+      second.recommendations.map((r) => r.careerId),
+    );
+
+    // Within each equal-score group, names ascend.
+    const byScore = new Map<number, string[]>();
+    for (const rec of first.recommendations) {
+      const group = byScore.get(rec.matchScore) ?? [];
+      group.push(rec.careerName);
+      byScore.set(rec.matchScore, group);
+    }
+    for (const names of byScore.values()) {
+      expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    }
+    // Two full recomputes are needed to prove the order is stable rather than
+    // incidental, and each one scores the whole catalogue against a remote
+    // database, so this needs more than the default 30s budget.
+  }, 120_000);
 
   it('computes skill gaps with statuses and priorities derived from the catalogue', async () => {
     const { user, token } = await registerUser(app);

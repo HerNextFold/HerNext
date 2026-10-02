@@ -87,6 +87,51 @@ export interface CareerRecommendationResponse {
   reason: string;
 }
 
+/**
+ * READY             - the participant's own data separated the careers, so
+ *                     "recommendations" is a genuine ranking.
+ * INSUFFICIENT_DATA - the scorer's inputs could not distinguish any two careers
+ *                     (for example no stored skills and no target career). Every
+ *                     catalogue entry scored identically, so the backend returns
+ *                     an empty list and says what is missing instead of
+ *                     presenting an arbitrary alphabetical entry as a match.
+ */
+export type CareerRecommendationStatus = 'READY' | 'INSUFFICIENT_DATA';
+
+export interface CareerRecommendationsEnvelope {
+  status: CareerRecommendationStatus;
+  /** Deterministic, user-facing list of the inputs still needed. */
+  missing: string[];
+  recommendations: CareerRecommendationResponse[];
+}
+
+/**
+ * Describes which participant inputs are still needed before career matching
+ * can discriminate between catalogue entries.
+ *
+ * Note that years of experience alone is deliberately NOT sufficient: the
+ * experience component is career-agnostic (it adds the same amount to every
+ * career), so it cannot rank anything on its own. Only stored skills and an
+ * explicit target career can separate two careers.
+ */
+function missingRecommendationInputs(
+  skillCount: number,
+  targetCareerId: string | null,
+  experienceCount: number,
+): string[] {
+  const missing: string[] = [];
+  if (skillCount === 0) {
+    missing.push('Select at least one skill from the approved catalogue.');
+  }
+  if (targetCareerId === null) {
+    missing.push('Choose a target career from the approved catalogue.');
+  }
+  if (experienceCount === 0) {
+    missing.push('Add a work experience, or complete your AI career impact assessment.');
+  }
+  return missing;
+}
+
 export interface SkillGapsResponse {
   career: { id: string; name: string };
   skills: Array<{ skillId: string; skillName: string; status: SkillGapStatus; priority: GapPriority }>;
@@ -251,12 +296,19 @@ export class AiService {
     return toTransferableSkillResponse(resolved, byId);
   }
 
-  async runCareerRecommendations(userId: string, db?: Db): Promise<CareerRecommendationResponse[]> {
-    const recommendations = await this.computeCareerRecommendations(userId, db);
+  async runCareerRecommendations(userId: string, db?: Db): Promise<CareerRecommendationsEnvelope> {
+    const computed = await this.computeCareerRecommendations(userId, db);
+    // Never persist a ranking the scorer could not actually discriminate:
+    // storing it would make an arbitrary alphabetical order look authoritative
+    // on every later read.
+    if (computed.status === 'INSUFFICIENT_DATA') {
+      await replaceCareerRecommendations(db ?? getPool(), userId, []);
+      return computed;
+    }
     await replaceCareerRecommendations(
       db ?? getPool(),
       userId,
-      recommendations.map((item) => ({
+      computed.recommendations.map((item) => ({
         careerPathId: item.careerId,
         matchScore: item.matchScore,
         reason: item.reason,
@@ -264,7 +316,11 @@ export class AiService {
       })),
     );
     const stored = await listCareerRecommendationsWithName(db ?? getPool(), userId);
-    return stored.map(toCareerRecommendationResponse);
+    return {
+      status: computed.status,
+      missing: computed.missing,
+      recommendations: stored.map(toCareerRecommendationResponse),
+    };
   }
 
   /**
@@ -272,28 +328,61 @@ export class AiService {
    * persisted results when present; otherwise computes the deterministic
    * recommendation without persisting. Optional `limit` clamps the list.
    */
-  async getCareerRecommendations(userId: string, limit?: number, db?: Db): Promise<CareerRecommendationResponse[]> {
+  async getCareerRecommendations(
+    userId: string,
+    limit?: number,
+    db?: Db,
+  ): Promise<CareerRecommendationsEnvelope> {
     const pool = db ?? getPool();
     const stored = await listCareerRecommendationsWithName(pool, userId);
-    const recommendations =
-      stored.length > 0 ? stored : await this.computeCareerRecommendations(userId, db);
-    return (limit === undefined ? recommendations : recommendations.slice(0, limit)).map(
-      toCareerRecommendationResponse,
-    );
+    const envelope =
+      stored.length > 0
+        ? {
+            status: 'READY' as const,
+            missing: [] as string[],
+            recommendations: stored.map(toCareerRecommendationResponse),
+          }
+        : await this.computeCareerRecommendations(userId, db);
+    return {
+      ...envelope,
+      recommendations:
+        limit === undefined ? envelope.recommendations : envelope.recommendations.slice(0, limit),
+    };
   }
 
-  /** Deterministic, catalogue-grounded career matching (docs/AI_SPEC.md §15). */
+  /**
+   * Deterministic, catalogue-grounded career matching (docs/AI_SPEC.md §15).
+   *
+   * Returns INSUFFICIENT_DATA rather than a ranked list whenever the scorer's
+   * inputs cannot tell two careers apart. The failure this prevents: with no
+   * stored skills and no target career, every career scored identically, and
+   * because the sort had no tiebreak the alphabetically first catalogue entry
+   * was presented to every participant as their "#1 match".
+   */
   private async computeCareerRecommendations(
     userId: string,
     db?: Db,
-  ): Promise<
-    Array<{ careerId: string; careerName: string; matchScore: number; rank: number; reason: string }>
-  > {
+  ): Promise<CareerRecommendationsEnvelope> {
     const pool = db ?? getPool();
     const userSkills = await listUserSkillsWithNames(pool, userId);
     const userSkillIds = new Set(userSkills.map((s) => s.skillId));
     const profile = await findCareerProfileByUserId(pool, userId);
     const experiences = await listExperiences(pool, userId);
+
+    // An explicit completion marker is required before any ranking is offered.
+    // A "career_profiles" row can exist from a submission that only half
+    // committed under the old multi-request flow, and ranking that participant
+    // would present a confident list built on data they never finished giving.
+    // Score variance alone is not a sufficient guard: a target career on its own
+    // separates the scores, so a half-written profile could still produce a
+    // plausible-looking ranking.
+    if (profile === null || profile.onboardingCompletedAt === null) {
+      return {
+        status: 'INSUFFICIENT_DATA',
+        missing: ['Complete your onboarding profile so matches are calculated from real data'],
+        recommendations: [],
+      };
+    }
 
     // Relevant experience duration comes from real user-provided records: the
     // declared years on each experience plus the career profile's total. We
@@ -334,9 +423,34 @@ export class AiService {
       });
     }
 
-    return results
-      .sort((a, b) => b.matchScore - a.matchScore)
+    if (results.length === 0) {
+      return {
+        status: 'INSUFFICIENT_DATA',
+        missing: missingRecommendationInputs(userSkillIds.size, profile?.targetCareerId ?? null, experiences.length),
+        recommendations: [],
+      };
+    }
+
+    // The ranking is only meaningful if the participant's own data actually
+    // separated the careers. A single distinct score means every catalogue
+    // entry tied, so any "top match" would be arbitrary.
+    const distinctScores = new Set(results.map((item) => item.matchScore));
+    if (distinctScores.size <= 1) {
+      return {
+        status: 'INSUFFICIENT_DATA',
+        missing: missingRecommendationInputs(userSkillIds.size, profile?.targetCareerId ?? null, experiences.length),
+        recommendations: [],
+      };
+    }
+
+    // Primary: match score, descending. Secondary: career name, ascending, so
+    // genuinely equal scores are ordered deterministically instead of inheriting
+    // whatever order the catalogue query happened to return.
+    const ranked = results
+      .sort((a, b) => b.matchScore - a.matchScore || a.careerName.localeCompare(b.careerName))
       .map((item, index) => ({ ...item, rank: index + 1 }));
+
+    return { status: 'READY', missing: [], recommendations: ranked };
   }
 
   async runSkillGaps(userId: string, careerPathId: string, db?: Db): Promise<SkillGapsResponse> {

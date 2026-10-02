@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -19,8 +19,16 @@ import {
 } from 'lucide-react'
 import PurpleBackgroundDots from '../components/dashboard/PurpleBackgroundDots'
 import Button from '../components/Button'
-import { useUserContext } from '../context/UserContext'
-import { ApiError, createExperience, updateProfile, type EmploymentType } from '../lib/api'
+import { useUserContext, type OnboardingState } from '../context/UserContext'
+import {
+  ApiError,
+  completeOnboarding,
+  listCatalogueCareers,
+  listCatalogueSkills,
+  type CatalogueCareer,
+  type CatalogueSkill,
+  type EmploymentType,
+} from '../lib/api'
 
 /**
  * Maps the Onboarding "work situation" button-group value to the backend's
@@ -54,13 +62,13 @@ function mapWorkSituationToEmploymentType(workSituation: string): EmploymentType
  */
 function mapYearsExperienceToNumber(yearsExperience: string): number {
   switch (yearsExperience) {
-    case '0–1 years':
+    case '0â€“1 years':
       return 0
-    case '1–3 years':
+    case '1â€“3 years':
       return 2
-    case '3–5 years':
+    case '3â€“5 years':
       return 4
-    case '5–8 years':
+    case '5â€“8 years':
       return 6
     case '8+ years':
       return 8
@@ -79,8 +87,7 @@ interface RolePreset {
   category: 'Design' | 'Engineering' | 'Product' | 'Data & AI' | 'Strategy & Ops' | 'Marketing'
   popularSkills: { name: string; type: 'Technical' | 'Business' | 'Creative' | 'People' | 'Tools' }[]
   suggestedTargetRoles: string[]
-  sampleExperience: string
-  guidancePrompts: { label: string; text: string }[]
+  guidancePrompts: { label: string; hint: string }[]
 }
 
 const ROLE_DATABASE: Record<string, RolePreset> = {
@@ -105,13 +112,11 @@ const ROLE_DATABASE: Record<string, RolePreset> = {
       'Lead iOS/Android Engineer',
       'AI Mobile Product Engineer',
     ],
-    sampleExperience:
-      'For the past 4 years as a Mobile Developer, I built and published cross-platform iOS and Android apps using React Native and Swift. Integrated push notifications, offline caching, and optimized UI frame rates to 60fps across devices.',
     guidancePrompts: [
-      { label: 'Responsibilities', text: 'Architected mobile frontend components and integrated GraphQL/REST endpoints.' },
-      { label: 'Projects', text: 'Shipped a mobile banking app with 500k+ downloads on App Store & Google Play.' },
-      { label: 'Problems Solved', text: 'Reduced app bundle size by 35% and improved cold start startup time by 400ms.' },
-      { label: 'Tools & Methods', text: 'React Native, Swift, Kotlin, Xcode, Android Studio, Fastlane, Firebase.' },
+      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
+      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
+      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
+      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
     ],
   },
   'Frontend Developer': {
@@ -135,13 +140,11 @@ const ROLE_DATABASE: Record<string, RolePreset> = {
       'Design Systems Engineer',
       'Frontend Architect',
     ],
-    sampleExperience:
-      'Architected responsive web applications using React, Next.js, and TypeScript. Improved Lighthouse performance scores by 40% and built dynamic AI-assisted workflow interfaces for B2B users.',
     guidancePrompts: [
-      { label: 'Responsibilities', text: 'Led frontend architecture and built reusable UI component libraries.' },
-      { label: 'Projects', text: 'Spearheaded migration from legacy SPA to Next.js App Router.' },
-      { label: 'Problems Solved', text: 'Eliminated render bottlenecks, reducing initial page load time from 3.2s to 0.8s.' },
-      { label: 'Tools & Methods', text: 'React 19, TypeScript, Next.js, Tailwind CSS, Vite, Jest, Storybook.' },
+      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
+      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
+      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
+      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
     ],
   },
   'Backend Developer': {
@@ -164,13 +167,11 @@ const ROLE_DATABASE: Record<string, RolePreset> = {
       'Principal Cloud Backend Engineer',
       'AI Platform Backend Engineer',
     ],
-    sampleExperience:
-      'Engineered high-throughput backend services using Python (FastAPI) and Node.js. Designed relational and NoSQL database schemas handling over 10M requests per day with sub-50ms latency.',
     guidancePrompts: [
-      { label: 'Responsibilities', text: 'Maintained API gateways, database migrations, and microservice orchestration.' },
-      { label: 'Projects', text: 'Built real-time event streaming pipeline processing 100k events/sec with Kafka.' },
-      { label: 'Problems Solved', text: 'Refactored slow SQL queries, reducing P99 latency by 75%.' },
-      { label: 'Tools & Methods', text: 'Node.js, Python, PostgreSQL, Redis, Docker, Kubernetes, AWS, gRPC.' },
+      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
+      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
+      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
+      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
     ],
   },
   'UI/UX Designer': {
@@ -193,13 +194,11 @@ const ROLE_DATABASE: Record<string, RolePreset> = {
       'Design Systems Lead',
       'Head of Product Design',
     ],
-    sampleExperience:
-      'For the past 4 years as a UI/UX designer, I led product design for consumer mobile applications and responsive dashboards. I conducted user interviews with over 60 participants and shipped scalable Figma design systems.',
     guidancePrompts: [
-      { label: 'Responsibilities', text: 'Owned end-to-end design process from discovery research to high-fidelity Figma handoff.' },
-      { label: 'Projects', text: 'Redesigned core onboarding flow, increasing user completion rate by 32%.' },
-      { label: 'Problems Solved', text: 'Standardized design system components across web and mobile platforms.' },
-      { label: 'Tools & Methods', text: 'Figma, FigJam, Maze, Principle, Design Tokens, User Testing.' },
+      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
+      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
+      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
+      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
     ],
   },
   'Product Manager': {
@@ -221,13 +220,11 @@ const ROLE_DATABASE: Record<string, RolePreset> = {
       'Director of Product',
       'Group Product Manager',
     ],
-    sampleExperience:
-      'Owned the product vision and execution for a B2B SaaS platform. Collaborated cross-functionally with engineering and design to launch 4 major feature releases that boosted ARR by $1.2M.',
     guidancePrompts: [
-      { label: 'Responsibilities', text: 'Managed product backlog, sprint prioritization, and quarterly roadmap execution.' },
-      { label: 'Projects', text: 'Launched AI-powered analytics assistant feature used by 80% of enterprise clients.' },
-      { label: 'Problems Solved', text: 'Aligned engineering velocity with business goals, reducing time-to-market by 25%.' },
-      { label: 'Tools & Methods', text: 'Jira, Amplitude, Mixpanel, Notion, Figma, Agile/Scrum.' },
+      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
+      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
+      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
+      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
     ],
   },
   'Data Analyst': {
@@ -249,16 +246,25 @@ const ROLE_DATABASE: Record<string, RolePreset> = {
       'Data Science Manager',
       'AI Data Strategist',
     ],
-    sampleExperience:
-      'Analyzed large-scale user interaction datasets to extract actionable business insights. Created automated executive dashboards in Tableau and optimized SQL data pipelines.',
     guidancePrompts: [
-      { label: 'Responsibilities', text: 'Built real-time metric dashboards and conducted cohort retention analysis.' },
-      { label: 'Projects', text: 'Discovered key funnel drop-off points, driving recommendations that recovered $450k in lost conversions.' },
-      { label: 'Problems Solved', text: 'Automated manual weekly reporting scripts into Snowflake + dbt models.' },
-      { label: 'Tools & Methods', text: 'SQL, Python, Tableau, Snowflake, dbt, Metabase, Excel.' },
+      { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
+      { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
+      { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
+      { label: 'Tools & Methods', hint: 'What did you use day to day?' },
     ],
   },
 }
+
+/**
+ * Skill confidence, stored using the same vocabulary as the persisted
+ * `SkillProficiency['level']` union so no value has to be invented or
+ * translated on the way into the profile cache.
+ */
+const CONFIDENCE_LEVELS: Array<{ value: OnboardingState['skills'][number]['level']; label: string }> = [
+  { value: 'Beginner', label: 'Beginner' },
+  { value: 'Intermediate', label: 'Comfortable' },
+  { value: 'Advanced', label: 'Advanced' },
+];
 
 const DEFAULT_PRESET: RolePreset = {
   title: 'Professional Specialist',
@@ -279,108 +285,261 @@ const DEFAULT_PRESET: RolePreset = {
     'Product Operations Specialist',
     'AI Transformation Consultant',
   ],
-  sampleExperience:
-    'Led cross-functional initiatives to streamline business operations and improve execution speed. Partnered with technical and executive teams to ship high-impact programs.',
   guidancePrompts: [
-    { label: 'Responsibilities', text: 'Managed project scope, stakeholder alignment, and resource allocation.' },
-    { label: 'Projects', text: 'Spearheaded operational workflow redesign saving 15 hours per team member weekly.' },
-    { label: 'Problems Solved', text: 'Identified efficiency gaps and implemented modern digital automation tools.' },
-    { label: 'Tools & Methods', text: 'Asana, Notion, Slack, Google Workspace, Data Analytics, Agile.' },
+    { label: 'Responsibilities', hint: 'What were you personally responsible for?' },
+    { label: 'Projects', hint: 'What did you build or work on, and for whom?' },
+    { label: 'Problems Solved', hint: 'What went wrong, and what did you do about it?' },
+    { label: 'Tools & Methods', hint: 'What did you use day to day?' },
   ],
 }
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const { onboarding, updateOnboarding } = useUserContext()
+  const { onboarding, updateOnboarding, setOnboardingCompleted, onboardingCompleted } = useUserContext()
   const [currentStep, setCurrentStep] = useState<number>(1)
 
+  // Someone who has already completed onboarding should be editing their profile
+  // in Settings, not replaying this flow: re-running it would overwrite real
+  // answers with whatever they type now, and would append a second experience.
+  // `onboardingCompleted` is null until the server has answered, and this waits
+  // for that answer rather than guessing, so a refresh on /onboarding does not
+  // briefly bounce a completed participant to the dashboard.
+  useEffect(() => {
+    if (onboardingCompleted === true) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [onboardingCompleted, navigate]);
+
   // Step 2 Form State
-  const [currentRole, setCurrentRole] = useState<string>(onboarding.currentRole || 'Frontend Developer')
-  const [industry, setIndustry] = useState<string>(onboarding.industry || 'Technology & Software')
-  const [yearsExperience, setYearsExperience] = useState<string>(onboarding.yearsOfExperience || '3–5 years')
-  const [workSituation, setWorkSituation] = useState<string>(onboarding.workSituation || 'Full-time')
-  const [education, setEducation] = useState<string>(onboarding.education || "Bachelor's Degree")
+  //
+  // These start EMPTY. The previous hardcoded fallbacks
+  // ('Frontend Developer', 'Technology & Software', '3-5 years',
+  // "Bachelor's Degree") were persisted as if the participant had supplied
+  // them, which fed the recommendation scorer phantom experience years. An
+  // unknown value is represented as unselected and must be provided by the
+  // participant; see validateOnboardingBeforeSubmit().
+  const [currentRole, setCurrentRole] = useState<string>(onboarding.currentRole)
+  const [industry, setIndustry] = useState<string>(onboarding.industry)
+  const [yearsExperience, setYearsExperience] = useState<string>(onboarding.yearsOfExperience)
+  const [workSituation, setWorkSituation] = useState<string>(onboarding.workSituation)
+  const [education, setEducation] = useState<string>(onboarding.education)
 
   // Step 3 Skills State
+  //
+  // Skills are stored as APPROVED CATALOGUE ids. The backend refuses to
+  // persist free text as a skill (docs/AGENTS.md Â§16), so the participant
+  // picks from the real catalogue. Nothing is pre-selected: the previous
+  // behaviour auto-selected six preset skills the participant never chose,
+  // which fabricated their skill profile and drove the match score.
+  const [catalogueSkills, setCatalogueSkills] = useState<CatalogueSkill[]>([])
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [skillSearchInput, setSkillSearchInput] = useState<string>('')
+  const [confidenceLevel, setConfidenceLevel] = useState<OnboardingState['skills'][number]['level']>('Intermediate')
+  const [catalogueLoading, setCatalogueLoading] = useState(true)
+  const [catalogueError, setCatalogueError] = useState('')
+
   const activeRolePreset = useMemo(() => {
     return ROLE_DATABASE[currentRole] || DEFAULT_PRESET
   }, [currentRole])
 
-  const [selectedSkills, setSelectedSkills] = useState<string[]>(
-    onboarding.skills && onboarding.skills.length > 0
-      ? onboarding.skills.map((s) => s.name)
-      : activeRolePreset.popularSkills.slice(0, 6).map((s) => s.name)
+  const selectedSkillNames = useMemo(
+    () =>
+      catalogueSkills
+        .filter((skill) => selectedSkillIds.includes(skill.id))
+        .map((skill) => skill.name),
+    [catalogueSkills, selectedSkillIds],
   )
-  const [skillSearchInput, setSkillSearchInput] = useState<string>('')
-  const [confidenceLevel, setConfidenceLevel] = useState<string>('Comfortable')
+
+  const skillSearchResults = useMemo(() => {
+    const query = skillSearchInput.trim().toLowerCase()
+    if (query === '') return []
+    return catalogueSkills
+      .filter((skill) => !selectedSkillIds.includes(skill.id))
+      .filter((skill) => skill.name.toLowerCase().includes(query))
+      .slice(0, 8)
+  }, [catalogueSkills, selectedSkillIds, skillSearchInput])
+
+  const addSkill = (skillId: string) => {
+    if (selectedSkillIds.includes(skillId)) return
+    setSelectedSkillIds((prev) => [...prev, skillId])
+    setSkillSearchInput('')
+  }
+
+  const removeSkill = (skillId: string) => {
+    setSelectedSkillIds((prev) => prev.filter((id) => id !== skillId))
+  }
 
   const handleRoleSelect = (roleName: string) => {
     setCurrentRole(roleName)
-    const preset = ROLE_DATABASE[roleName] || DEFAULT_PRESET
-    const initialSkillNames = preset.popularSkills.slice(0, 6).map((s) => s.name)
-    setSelectedSkills(initialSkillNames)
   }
 
   // Step 4 Experience State
   const [practicalExperience, setPracticalExperience] = useState<string>('')
 
-  const handleInsertGuidance = (text: string) => {
-    setPracticalExperience((prev) => (prev ? `${prev} ${text}` : text))
+  /**
+   * Adds a blank heading for the participant to write under.
+   *
+   * This used to insert a fully written sentence describing work the
+   * participant may never have done ("Shipped a mobile banking app with 500k+
+   * downloads"). That text was stored as their experience and then fed straight
+   * into the AI assessment and the Career Passport, so the app ended up
+   * asserting a history the participant never claimed - which docs/AI_SPEC.md
+   * and backend/AGENTS.md Â§18 explicitly forbid.
+   *
+   * Now only the heading is added and the participant supplies the content. A
+   * blank prompt is recoverable; invented history is not.
+   */
+  const handleInsertGuidance = (label: string) => {
+    setPracticalExperience((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${label}:\n` : `${label}:\n`))
   }
 
   // Step 5 Goals State
-  const [goalDirection, setGoalDirection] = useState<string>(
-    onboarding.goalType === 'Growth' ? 'Grow in my current role' : 'Move into a new role'
-  )
-  const [targetRole, setTargetRole] = useState<string>(onboarding.targetRole || 'AI Engineer')
-  const [nextChapterPriorities, setNextChapterPriorities] = useState<string[]>([
-    'Higher Income',
-    'AI & New Skills',
-    'Remote / Hybrid',
-  ])
+  //
+  // Both of these start UNSELECTED. They used to be pre-seeded ('Grow in my
+  // current role' and three priorities such as 'Higher Income'), which meant a
+  // participant who simply clicked through had goals recorded that they never
+  // expressed - and `careerInterests` is persisted from them, so the fabricated
+  // goals reached the database. Nothing about a person's goals is known until
+  // they say so.
+  const [goalDirection, setGoalDirection] = useState<string>('')
+  const [nextChapterPriorities, setNextChapterPriorities] = useState<string[]>([])
+
+  // The target career must be an approved catalogue entry so it can be stored
+  // as a real targetCareerId. Free text is not accepted, and no career is
+  // pre-selected on the participant's behalf.
+  const [catalogueCareers, setCatalogueCareers] = useState<CatalogueCareer[]>([])
+  const [targetCareerId, setTargetCareerId] = useState<string>('')
+  const [targetRoleName, setTargetRoleName] = useState<string>(onboarding.targetRole)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
+  useEffect(() => {
+    let cancelled = false
+    async function loadCatalogue() {
+      try {
+        const [skills, careers] = await Promise.all([
+          listCatalogueSkills(),
+          listCatalogueCareers(),
+        ])
+        if (cancelled) return
+        setCatalogueSkills(skills)
+        setCatalogueCareers(careers)
+        setCatalogueError('')
+      } catch (err) {
+        if (cancelled) return
+        // A catalogue failure must be surfaced, never silently worked around
+        // with placeholder skills or a default career.
+        setCatalogueError(
+          err instanceof ApiError
+            ? err.message
+            : 'Could not load the approved skills and careers catalogue.',
+        )
+      } finally {
+        if (!cancelled) setCatalogueLoading(false)
+      }
+    }
+    void loadCatalogue()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  /**
+   * Rejects an incomplete submission in the browser so the participant gets a
+   * precise message, without inventing substitute values. The backend remains
+   * the authority and re-validates everything.
+   */
+  const validateOnboardingBeforeSubmit = (): string | null => {
+    if (currentRole.trim() === '') return 'Please tell us your current role.'
+    if (industry.trim() === '') return 'Please choose the industry you work in.'
+    if (yearsExperience.trim() === '') return 'Please choose your years of work experience.'
+    if (workSituation.trim() === '') return 'Please choose your current work situation.'
+    if (goalDirection.trim() === '') return 'Please choose which direction you are heading in.'
+    if (targetCareerId === '') return 'Please choose a target career from the approved catalogue.'
+    return null
+  }
+
   const handleFinishOnboarding = async () => {
     if (isSubmitting) return
     setSubmitError('')
+
+    const validationError = validateOnboardingBeforeSubmit()
+    if (validationError !== null) {
+      setSubmitError(validationError)
+      return
+    }
+
     setIsSubmitting(true)
 
     const employmentType = mapWorkSituationToEmploymentType(workSituation)
     const yearsOfExperience = mapYearsExperienceToNumber(yearsExperience)
+    const trimmedExperience = practicalExperience.trim()
+    const targetCareer = catalogueCareers.find((career) => career.id === targetCareerId)
 
     try {
-      await updateProfile({
-        currentOccupation: currentRole,
-        industry,
+      // ONE atomic backend call. The profile, skills, target career, the
+      // optional experience and the onboarding completion marker are validated
+      // and committed together, so a failure can no longer leave a
+      // half-written profile behind.
+      await completeOnboarding({
+        currentOccupation: currentRole.trim(),
+        industry: industry.trim(),
         yearsOfExperience,
         employmentType,
-        education,
+        education: education.trim() === '' ? null : education.trim(),
+        careerInterests: nextChapterPriorities,
+        targetCareerId,
+        skillIds: selectedSkillIds,
+        // Only record an experience when the participant actually described
+        // one. Otherwise nothing is stored - no placeholder job history.
+        experience:
+          trimmedExperience === ''
+            ? null
+            : {
+                title: currentRole.trim(),
+                description: trimmedExperience,
+                employmentType,
+              },
       })
 
-      await createExperience({
-        title: currentRole,
-        description: practicalExperience,
-        employmentType,
-      })
-
+      // The local onboarding cache mirrors what the server just committed. It
+      // is a display cache only; the server remains the source of truth for
+      // completion.
       updateOnboarding({
-        currentRole,
+        currentRole: currentRole.trim(),
         yearsOfExperience: yearsExperience,
         workSituation,
-        industry,
+        industry: industry.trim(),
         education,
-        skills: selectedSkills.map((name) => ({ name, level: 'Advanced', category: 'Technical' })),
+        skills: selectedSkillIds.map((id) => {
+          // Read the real catalogue entry rather than inventing a level or a
+          // category. `confidenceLevel` is what the participant actually chose,
+          // and the category comes from the approved catalogue record.
+          const entry = catalogueSkills.find((s) => s.id === id);
+          return {
+            name: entry?.name ?? '',
+            level: confidenceLevel,
+            category: entry?.category ?? '',
+          };
+        }),
         goalType: goalDirection.toLowerCase().includes('new role') ? 'Transition' : 'Growth',
-        targetRole: targetRole || activeRolePreset.suggestedTargetRoles[0] || 'AI Engineer',
-        aiAnalysis: `High capability transfer from ${currentRole} to ${targetRole || 'AI Role'}.`,
+        targetRole: targetCareer?.name ?? targetRoleName,
+        aiAnalysis: '',
         isOnboarded: true,
       })
+      setOnboardingCompleted(true)
 
-      navigate('/dashboard/insights')
+      navigate('/dashboard')
     } catch (err) {
-      setSubmitError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
+      // The backend's `error.details` carries the specific rejected field; its
+      // `message` is only the generic "Invalid request data". Showing the detail
+      // tells the participant what to actually fix.
+      if (err instanceof ApiError) {
+        setSubmitError(err.firstDetailMessage ?? err.message)
+      } else {
+        setSubmitError('Something went wrong. Please try again.')
+      }
       setIsSubmitting(false)
     }
   }
@@ -437,18 +596,6 @@ export default function Onboarding() {
       }
     }
   }, [currentStep])
-
-  const addSkill = (skillName: string) => {
-    if (!skillName.trim()) return
-    if (!selectedSkills.includes(skillName.trim())) {
-      setSelectedSkills([...selectedSkills, skillName.trim()])
-    }
-    setSkillSearchInput('')
-  }
-
-  const removeSkill = (skillName: string) => {
-    setSelectedSkills(selectedSkills.filter((s) => s !== skillName))
-  }
 
   const handleNextStep = () => {
     if (currentStep < 7) {
@@ -684,7 +831,7 @@ export default function Onboarding() {
                 <div className="flex items-center gap-3 rounded-xl border border-peach-200 bg-peach-50/70 p-4 text-xs text-plum-950">
                   <Clock size={18} className="shrink-0 text-plum-700" />
                   <span>
-                    <strong>Takes about 5–7 minutes.</strong> You can save your progress and come back at any time.
+                    <strong>Takes about 5â€“7 minutes.</strong> You can save your progress and come back at any time.
                   </span>
                 </div>
 
@@ -779,6 +926,7 @@ export default function Onboarding() {
                         onChange={(e) => setIndustry(e.target.value)}
                         className="mt-1.5 w-full rounded-xl border border-hairline bg-slate-50/50 px-3.5 py-2.5 text-sm text-ink outline-none focus:border-plum-600 focus:bg-white"
                       >
+                        <option value="">Select your industry</option>
                         <option>Technology & Software</option>
                         <option>Finance & Fintech</option>
                         <option>Healthcare & Biotech</option>
@@ -798,10 +946,11 @@ export default function Onboarding() {
                         onChange={(e) => setYearsExperience(e.target.value)}
                         className="mt-1.5 w-full rounded-xl border border-hairline bg-slate-50/50 px-3.5 py-2.5 text-sm text-ink outline-none focus:border-plum-600 focus:bg-white"
                       >
-                        <option>0–1 years</option>
-                        <option>1–3 years</option>
-                        <option>3–5 years</option>
-                        <option>5–8 years</option>
+                        <option value="">Select your experience</option>
+                        <option>0â€“1 years</option>
+                        <option>1â€“3 years</option>
+                        <option>3â€“5 years</option>
+                        <option>5â€“8 years</option>
                         <option>8+ years</option>
                       </select>
                     </div>
@@ -857,10 +1006,10 @@ export default function Onboarding() {
 
                 <div className="flex items-center justify-between pt-4">
                   <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
-                    ← Back
+                    â† Back
                   </Button>
                   <Button variant="primary" onClick={handleNextStep} className="px-6 py-2.5 text-xs font-semibold">
-                    Continue to Skills →
+                    Continue to Skills â†’
                   </Button>
                 </div>
               </motion.div>
@@ -902,40 +1051,84 @@ export default function Onboarding() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
-                            addSkill(skillSearchInput)
+                            if (skillSearchResults.length > 0) {
+                              addSkill(skillSearchResults[0].id)
+                            }
                           }
                         }}
-                        placeholder="Search or type a skill e.g. React Native, Swift, Figma..."
+                        placeholder="Search the approved HerNext skills catalogue"
                         className="w-full rounded-xl border border-hairline bg-slate-50/50 py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-plum-600 focus:bg-white"
                       />
                     </div>
                     <Button
                       variant="primary"
-                      onClick={() => addSkill(skillSearchInput)}
+                      disabled={skillSearchResults.length === 0}
+                      onClick={() => {
+                        if (skillSearchResults.length > 0) {
+                          addSkill(skillSearchResults[0].id)
+                        }
+                      }}
                       className="px-4 py-2.5 text-xs font-semibold shrink-0"
                     >
                       <Plus size={16} /> Add Skill
                     </Button>
                   </div>
+
+                  {catalogueError !== '' && (
+                    <p role="alert" className="mt-2 text-xs font-semibold text-rose-700">
+                      {catalogueError}
+                    </p>
+                  )}
+
+                  {!catalogueError && skillSearchInput.trim() !== '' && (
+                    <div className="mt-2 rounded-xl border border-hairline bg-white p-1.5 shadow-xs">
+                      {skillSearchResults.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-body/70">
+                          No approved skill matches &ldquo;{skillSearchInput.trim()}&rdquo;. Pick a
+                          skill from the HerNext catalogue so it can be stored against your profile.
+                        </p>
+                      ) : (
+                        skillSearchResults.map((skill) => (
+                          <button
+                            key={skill.id}
+                            type="button"
+                            onClick={() => addSkill(skill.id)}
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-medium text-ink hover:bg-plum-50"
+                          >
+                            <span>{skill.name}</span>
+                            <span className="text-[10px] uppercase tracking-wide text-body/60">
+                              {skill.category.replace(/_/g, ' ')}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-2xl border border-hairline bg-slate-50/60 p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-ink">
-                      Your Selected Skills ({selectedSkills.length})
+                      Your Selected Skills ({selectedSkillIds.length})
                     </span>
-                    {selectedSkills.length > 0 && (
+                    {selectedSkillIds.length > 0 && (
                       <button
                         type="button"
-                        onClick={() => setSelectedSkills([])}
+                        onClick={() => setSelectedSkillIds([])}
                         className="text-[11px] text-rose-600 hover:underline"
                       >
                         Clear all
                       </button>
                     )}
                   </div>
+                  {selectedSkillIds.length === 0 && (
+                    <p className="pt-1 text-xs text-body/70">
+                      No skills selected yet. Add the skills you genuinely have - nothing is selected
+                      for you.
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {selectedSkills.map((skill) => (
+                    {selectedSkillNames.map((skill) => (
                       <span
                         key={skill}
                         className="inline-flex items-center gap-1.5 rounded-full border border-plum-200 bg-plum-50 px-3 py-1 text-xs font-semibold text-plum-950 shadow-2xs"
@@ -943,7 +1136,12 @@ export default function Onboarding() {
                         {skill}
                         <button
                           type="button"
-                          onClick={() => removeSkill(skill)}
+                          aria-label={`Remove ${skill}`}
+                          onClick={() =>
+                            removeSkill(
+                              catalogueSkills.find((item) => item.name === skill)?.id ?? '',
+                            )
+                          }
                           className="rounded-full p-0.5 hover:bg-plum-200 text-plum-800"
                         >
                           <X size={12} />
@@ -955,18 +1153,18 @@ export default function Onboarding() {
 
                 <div className="space-y-3">
                   <span className="text-xs font-bold uppercase tracking-wider text-ink/80">
-                    Popular Suggestions for {currentRole}
+                    {catalogueLoading
+                      ? 'Loading the approved skills catalogue...'
+                      : `Browse the approved catalogue (${catalogueSkills.length} skills)`}
                   </span>
-                  <div className="flex flex-wrap gap-2">
-                    {activeRolePreset.popularSkills.map((item) => {
-                      const isSelected = selectedSkills.includes(item.name)
+                  <div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto">
+                    {catalogueSkills.map((item) => {
+                      const isSelected = selectedSkillIds.includes(item.id)
                       return (
                         <button
-                          key={item.name}
+                          key={item.id}
                           type="button"
-                          onClick={() =>
-                            isSelected ? removeSkill(item.name) : addSkill(item.name)
-                          }
+                          onClick={() => (isSelected ? removeSkill(item.id) : addSkill(item.id))}
                           className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                             isSelected
                               ? 'border-plum-700 bg-plum-900 text-white shadow-xs'
@@ -986,18 +1184,18 @@ export default function Onboarding() {
                     Overall Confidence Level across your skills
                   </label>
                   <div className="grid grid-cols-3 gap-2 pt-1">
-                    {['Beginner', 'Comfortable', 'Advanced'].map((lvl) => (
+                    {CONFIDENCE_LEVELS.map((lvl) => (
                       <button
-                        key={lvl}
+                        key={lvl.value}
                         type="button"
-                        onClick={() => setConfidenceLevel(lvl)}
+                        onClick={() => setConfidenceLevel(lvl.value)}
                         className={`rounded-xl border py-2 text-center text-xs font-semibold transition-all ${
-                          confidenceLevel === lvl
+                          confidenceLevel === lvl.value
                             ? 'border-plum-600 bg-plum-900 text-white'
                             : 'border-hairline bg-slate-50 text-body hover:bg-slate-100'
                         }`}
                       >
-                        {lvl}
+                        {lvl.label}
                       </button>
                     ))}
                   </div>
@@ -1005,10 +1203,10 @@ export default function Onboarding() {
 
                 <div className="flex items-center justify-between pt-4">
                   <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
-                    ← Back
+                    â† Back
                   </Button>
                   <Button variant="primary" onClick={handleNextStep} className="px-6 py-2.5 text-xs font-semibold">
-                    Continue to Experience →
+                    Continue to Experience â†’
                   </Button>
                 </div>
               </motion.div>
@@ -1050,7 +1248,7 @@ export default function Onboarding() {
                     rows={6}
                     value={practicalExperience}
                     onChange={(e) => setPracticalExperience(e.target.value)}
-                    placeholder={`e.g. ${activeRolePreset.sampleExperience}`}
+                    placeholder="Describe what you actually did. Write only what is true for you - this text is stored as your experience and is what the AI assessment analyses, so it must not describe work you did not do."
                     className="w-full rounded-2xl border border-hairline bg-slate-50/50 p-4 text-sm text-ink outline-none transition-all focus:border-plum-600 focus:bg-white focus:ring-2 focus:ring-plum-500/20"
                   />
 
@@ -1064,21 +1262,21 @@ export default function Onboarding() {
 
                 <div className="space-y-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-ink/80">
-                    Click any guidance prompt to add to your narrative:
+                    Add a section to write under:
                   </span>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {activeRolePreset.guidancePrompts.map((prompt) => (
                       <button
                         key={prompt.label}
                         type="button"
-                        onClick={() => handleInsertGuidance(prompt.text)}
+                        onClick={() => handleInsertGuidance(prompt.label)}
                         className="rounded-xl border border-hairline bg-slate-50/70 p-3 text-left transition-all hover:border-plum-300 hover:bg-white"
                       >
                         <span className="text-xs font-bold text-plum-950 block">
                           + {prompt.label}
                         </span>
                         <span className="text-[11px] text-body line-clamp-2 mt-0.5">
-                          {prompt.text}
+                          {prompt.hint}
                         </span>
                       </button>
                     ))}
@@ -1087,10 +1285,10 @@ export default function Onboarding() {
 
                 <div className="flex items-center justify-between pt-4">
                   <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
-                    ← Back
+                    â† Back
                   </Button>
                   <Button variant="primary" onClick={handleNextStep} className="px-6 py-2.5 text-xs font-semibold">
-                    Continue to Goals →
+                    Continue to Goals â†’
                   </Button>
                 </div>
               </motion.div>
@@ -1144,29 +1342,56 @@ export default function Onboarding() {
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-ink/80">
-                      Target Role Interest
+                      Target Career Interest
                     </label>
-                    <input
-                      type="text"
-                      value={targetRole}
-                      onChange={(e) => setTargetRole(e.target.value)}
-                      placeholder="e.g. Senior Mobile Engineer, AI Product Developer..."
-                      className="mt-1.5 w-full rounded-xl border border-hairline bg-slate-50/50 py-2.5 px-3.5 text-sm text-ink outline-none focus:border-plum-600 focus:bg-white"
-                    />
-
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <span className="text-[11px] text-body/70 self-center">Suggestions:</span>
-                      {activeRolePreset.suggestedTargetRoles.map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setTargetRole(r)}
-                          className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-body hover:bg-plum-100 hover:text-plum-900"
-                        >
-                          {r}
-                        </button>
-                      ))}
+                    <p className="mt-1 text-xs text-body/70">
+                      Choose a career from the approved HerNext catalogue. This is stored as your
+                      target so recommendations are based on your real goal.
+                    </p>
+                    <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-hairline bg-slate-50/50 p-1.5">
+                      {catalogueLoading && (
+                        <p className="px-3 py-2 text-xs text-body/70">Loading catalogue...</p>
+                      )}
+                      {!catalogueLoading && catalogueCareers.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-rose-700">
+                          The career catalogue could not be loaded. Reload to try again.
+                        </p>
+                      )}
+                      {catalogueCareers.map((career) => {
+                        const isSelected = targetCareerId === career.id
+                        return (
+                          <button
+                            key={career.id}
+                            type="button"
+                            onClick={() => {
+                              setTargetCareerId(career.id)
+                              setTargetRoleName(career.name)
+                            }}
+                            className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-all ${
+                              isSelected ? 'bg-plum-900 text-white' : 'hover:bg-plum-50'
+                            }`}
+                          >
+                            <span className="mt-0.5">
+                              {isSelected ? <Check size={14} /> : <Target size={14} />}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-xs font-semibold">{career.name}</span>
+                              <span
+                                className={`block text-[10px] ${isSelected ? 'text-white/75' : 'text-body/70'}`}
+                              >
+                                {career.industry} &middot; {career.level}
+                              </span>
+                            </span>
+                          </button>
+                        )
+                      })}
                     </div>
+                    {targetCareerId !== '' && (
+                      <p className="mt-2 text-xs font-semibold text-plum-900">
+                        Selected target:{' '}
+                        {catalogueCareers.find((career) => career.id === targetCareerId)?.name}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -1208,10 +1433,10 @@ export default function Onboarding() {
 
                 <div className="flex items-center justify-between pt-4">
                   <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
-                    ← Back
+                    â† Back
                   </Button>
                   <Button variant="primary" onClick={handleNextStep} className="px-6 py-2.5 text-xs font-semibold">
-                    Continue to Review →
+                    Continue to Review â†’
                   </Button>
                 </div>
               </motion.div>
@@ -1303,7 +1528,7 @@ export default function Onboarding() {
                         <div>
                           <h4 className="font-display text-sm font-bold text-ink">Skills</h4>
                           <span className="text-[11px] text-body">
-                            From Step 3 &bull; {selectedSkills.length} Core Competencies
+                            From Step 3 &bull; {selectedSkillIds.length} Core Competencies
                           </span>
                         </div>
                       </div>
@@ -1317,7 +1542,7 @@ export default function Onboarding() {
                     </div>
 
                     <div className="flex flex-wrap gap-2 pt-3">
-                      {selectedSkills.map((s) => (
+                      {selectedSkillNames.map((s) => (
                         <span key={s} className="rounded-lg border border-hairline bg-slate-50 px-2.5 py-1 text-xs font-medium text-ink">
                           {s}
                         </span>
@@ -1327,7 +1552,7 @@ export default function Onboarding() {
                     <div className="mt-3 flex items-center justify-between pt-2 border-t border-hairline/40 text-xs">
                       <span className="text-body">Overall Confidence Level:</span>
                       <span className="font-bold text-plum-900 bg-peach-100 px-2.5 py-0.5 rounded-md text-[11px]">
-                        {confidenceLevel} (Proficient)
+                        {confidenceLevel}
                       </span>
                     </div>
                   </div>
@@ -1392,12 +1617,19 @@ export default function Onboarding() {
                         <p className="font-bold text-ink">{goalDirection}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] font-semibold uppercase text-body/70">Target Role</span>
-                        <p className="font-bold text-plum-900">{targetRole}</p>
+                        <span className="text-[10px] font-semibold uppercase text-body/70">Target Career</span>
+                        <p className="font-bold text-plum-900">
+                          {catalogueCareers.find((career) => career.id === targetCareerId)?.name ??
+                            'Not selected yet'}
+                        </p>
                       </div>
                       <div>
                         <span className="text-[10px] font-semibold uppercase text-body/70">What Matters Most</span>
-                        <p className="font-bold text-ink">{nextChapterPriorities.join(', ')}</p>
+                        <p className="font-bold text-ink">
+                  {nextChapterPriorities.length > 0
+                    ? nextChapterPriorities.join(', ')
+                    : 'Not chosen yet'}
+                </p>
                       </div>
                     </div>
                   </div>
@@ -1418,10 +1650,10 @@ export default function Onboarding() {
 
                 <div className="flex items-center justify-between pt-2">
                   <Button variant="outline" onClick={handlePrevStep} className="px-6 py-2.5 text-xs font-semibold">
-                    ← Back
+                    â† Back
                   </Button>
                   <Button variant="primary" onClick={handleNextStep} className="px-8 py-3 text-xs font-bold shadow-md">
-                    Start My Career Analysis →
+                    Start My Career Analysis â†’
                   </Button>
                 </div>
               </motion.div>

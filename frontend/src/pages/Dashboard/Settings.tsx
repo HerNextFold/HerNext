@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { LocationSelects } from '../../components/LocationSelects';
 import { useUserContext } from '../../context/UserContext';
+import { clearSession } from '../../lib/session';
 import { ApiError, getCurrentUser, getProfile, updateProfile, type CareerProfile } from '../../lib/api';
 
 const SettingsPage: React.FC = () => {
@@ -178,10 +179,14 @@ const SettingsPage: React.FC = () => {
 
   const handleSignOut = () => {
     setShowSignOutModal(false);
-    showToast('Signing out of HerNext...');
-    setTimeout(() => {
-      navigate('/sign-in');
-    }, 1200);
+    // Drop the token and the cached user/onboarding data before leaving, so a
+    // second person signing in on this browser cannot inherit this account's
+    // name, profile answers or onboarding answers. clearSession() notifies
+    // UserContext to reset its in-memory copy too, which is what stops the save
+    // effect from writing it all straight back.
+    clearSession();
+    showToast('You have been signed out.');
+    navigate('/sign-in', { replace: true });
   };
 
   const handleDeleteAccount = () => {

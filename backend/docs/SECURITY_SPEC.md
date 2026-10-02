@@ -225,13 +225,45 @@ The database remains the source of truth for authorization.
 
 Access tokens should have a relatively short lifetime.
 
-Recommended MVP:
+**Implemented (MVP decision):**
 
 ```text
-Access token: 15–30 minutes
+Access token: 3d   (config: JWT_EXPIRES_IN, default "3d" in src/config/env.ts)
 ```
 
-Long-lived authentication should use a secure refresh/session strategy rather than indefinitely valid access tokens.
+### Why this deviates from the original 15-30 minute guidance
+
+The original recommendation was written on the assumption that a long-lived
+session is backed by a refresh/session strategy - the sentence below it says as
+much. **No such strategy exists in this codebase.** `JWT_REFRESH_EXPIRES_IN` is
+declared and exported in `src/config/env.ts`, but no refresh token is ever
+signed, stored, or accepted; there is no refresh endpoint. The access token is
+the only thing that keeps a participant signed in.
+
+With a 15-minute access token and no refresh, every participant is silently
+thrown back to the sign-in page every 15 minutes, on any in-flight request that
+returns 401 (see `frontend/src/lib/session.ts` -> `endSession()`). That was
+observed in practice as "the app logs me out constantly". A short token is only
+safe when something can silently replace it; here nothing can.
+
+### Residual risk (accepted, not hidden)
+
+A 3-day access token widens the window in which a stolen token is usable, and the
+token is held in `localStorage`, so a successful XSS on this origin can read it.
+This is a deliberate trade of security margin for a usable MVP, not a claim that
+3d is safer.
+
+What should supersede this section:
+
+1. Implement the refresh/session strategy this section was originally assuming
+   (short access token + rotating, httpOnly, same-site refresh cookie), and
+2. Return `JWT_EXPIRES_IN` to 15-30 minutes, and
+3. Move the access token out of `localStorage` into a cookie or in-memory store
+   to close the XSS-read window.
+
+Until (1) and (2) land, do not shorten this value: doing so reintroduces the
+forced-logout defect without reducing the real risk, which is token theft
+rather than token age.
 
 ---
 

@@ -29,17 +29,48 @@ function classifyStatus(status: number): ApiErrorKind {
   return 'client'
 }
 
+/**
+ * One entry from the backend's `error.details` array.
+ *
+ * Fastify/Zod puts the per-field reason here (e.g. "targetCareerId must be a
+ * valid uuid"), while `error.message` is only the generic "Invalid request
+ * data". Without this the UI cannot tell the participant *which* field was
+ * rejected, so a strict schema produces an unactionable error.
+ */
+export interface ApiErrorDetail {
+  instancePath?: string
+  path?: string
+  message?: string
+  params?: Record<string, unknown>
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly kind: ApiErrorKind
+  readonly details: ApiErrorDetail[]
 
-  constructor(message: string, status: number, code = '') {
+  constructor(message: string, status: number, code = '', details: ApiErrorDetail[] = []) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.kind = classifyStatus(status)
+    this.details = details
+  }
+
+  /**
+   * A specific, human-readable reason taken from `details`, or null when the
+   * backend gave none. Prefers the first entry that actually carries a message,
+   * because Fastify validation arrays can include parameter-only entries.
+   */
+  get firstDetailMessage(): string | null {
+    for (const detail of this.details) {
+      if (typeof detail.message === 'string' && detail.message.trim() !== '') {
+        return detail.message
+      }
+    }
+    return null
   }
 }
 
@@ -69,6 +100,19 @@ interface ApiFailure {
 
 type ApiEnvelope<T> = ApiSuccess<T> | ApiFailure
 
+/**
+ * The backend is not typed, so `details` arrives as `unknown`. Anything that is
+ * not an array of objects is discarded rather than trusted, which keeps a
+ * malformed payload from turning into a crash in the error path.
+ */
+function toErrorDetails(details: unknown): ApiErrorDetail[] {
+  if (!Array.isArray(details)) return []
+  return details.filter(
+    (entry): entry is ApiErrorDetail =>
+      typeof entry === 'object' && entry !== null && !Array.isArray(entry),
+  )
+}
+
 async function parseEnvelope<T>(response: Response): Promise<T> {
   let envelope: ApiEnvelope<T>
   try {
@@ -78,7 +122,12 @@ async function parseEnvelope<T>(response: Response): Promise<T> {
   }
 
   if (!envelope.success) {
-    throw new ApiError(envelope.error.message || GENERIC_ERROR_MESSAGE, response.status, envelope.error.code)
+    throw new ApiError(
+      envelope.error.message || GENERIC_ERROR_MESSAGE,
+      response.status,
+      envelope.error.code,
+      toErrorDetails(envelope.error.details),
+    )
   }
 
   return envelope.data
@@ -269,14 +318,109 @@ export interface CareerProfile {
 
 /**
  * Creates or updates the authenticated participant's career profile.
- * skillIds/targetCareerId are intentionally not accepted here yet - both
- * require approved-catalogue UUIDs and no catalogue endpoint exists on the
- * backend today, while this UI only collects free text for those fields.
+ *
+ * Prefer `completeOnboarding()` for the onboarding screen: this endpoint saves
+ * only the profile fields and deliberately does not mark onboarding complete,
+ * so a partial save can never be mistaken for a finished onboarding.
  * `country`/`state` are optional: omit a field to keep its stored value, or
  * pass `state: null` to clear the stored state or province.
  */
 export function updateProfile(payload: UpdateProfilePayload): Promise<CareerProfile> {
   return authRequest<CareerProfile>('PUT', '/profile', payload)
+}
+
+// ---------------------------------------------------------------------------
+// Approved catalogue
+//
+// The backend owns the career and skill catalogue (docs/AGENTS.md §16, §20).
+// A participant's target career and self-reported skills can only be persisted
+// as approved catalogue ids, so the onboarding UI resolves real user choices
+// against these lists instead of inventing an id or defaulting to one.
+// ---------------------------------------------------------------------------
+
+export interface CatalogueCareer {
+  id: string
+  name: string
+  industry: string
+  description: string
+  level: string
+}
+
+export interface CatalogueSkill {
+  id: string
+  name: string
+  category: string
+  description: string
+}
+
+export function listCatalogueCareers(): Promise<CatalogueCareer[]> {
+  return authRequest<CatalogueCareer[]>('GET', '/catalogue/careers')
+}
+
+export function listCatalogueSkills(): Promise<CatalogueSkill[]> {
+  return authRequest<CatalogueSkill[]>('GET', '/catalogue/skills')
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding
+// ---------------------------------------------------------------------------
+
+export interface OnboardingExperiencePayload {
+  title: string
+  description: string
+  employmentType: EmploymentType
+  organization?: string | null
+  years?: number | null
+  startDate?: string | null
+  endDate?: string | null
+}
+
+export interface CompleteOnboardingPayload {
+  currentOccupation: string
+  industry: string
+  yearsOfExperience: number
+  employmentType: EmploymentType
+  education?: string | null
+  careerInterests?: string[] | null
+  country?: string
+  state?: string | null
+  /** Approved catalogue career id the participant actually selected. */
+  targetCareerId: string
+  /** Approved catalogue skill ids the participant actually reported. */
+  skillIds: string[]
+  /**
+   * Omit (or send null) when the participant has no genuine experience to
+   * record. The backend inserts nothing in that case - no placeholder or
+   * invented employment history is ever created.
+   */
+  experience?: OnboardingExperiencePayload | null
+}
+
+export interface OnboardingStatus {
+  completed: boolean
+  completedAt: string | null
+}
+
+/**
+ * Submits the whole onboarding payload to the backend, which validates it and
+ * commits the profile, skills, target career, optional experience and the
+ * completion marker in a single transaction.
+ *
+ * This replaces the previous three independent client writes (PUT /profile,
+ * POST /experiences, then a local-only "onboarded" flag), which could leave a
+ * half-written profile behind whenever the experience write failed.
+ */
+export function completeOnboarding(payload: CompleteOnboardingPayload): Promise<CareerProfile> {
+  return authRequest<CareerProfile>('POST', '/onboarding', payload)
+}
+
+/**
+ * Server-owned onboarding completion state. Returns 200 even when the
+ * participant has no profile row, so route guards never have to infer
+ * completion from a 404 or from the profile's existence.
+ */
+export function getOnboardingStatus(): Promise<OnboardingStatus> {
+  return authRequest<OnboardingStatus>('GET', '/onboarding/status')
 }
 
 export interface CreateExperiencePayload {
@@ -376,8 +520,28 @@ export interface CareerRecommendation {
   reason: string
 }
 
+/**
+ * READY             - the participant's own stored data separated the careers,
+ *                     so `recommendations` is a genuine ranking.
+ * INSUFFICIENT_DATA - the backend could not tell any two careers apart, so
+ *                     `recommendations` is empty and `missing` says what the
+ *                     participant still needs to provide. An empty array here is
+ *                     NOT a bug to paper over: never substitute a catalogue
+ *                     career for it.
+ */
+export type CareerRecommendationStatus = 'READY' | 'INSUFFICIENT_DATA'
+
 export interface CareerRecommendationsResponse {
+  status: CareerRecommendationStatus
+  missing: string[]
   recommendations: CareerRecommendation[]
+}
+
+/** True when the backend declined to rank careers for lack of participant data. */
+export function isInsufficientData(
+  response: CareerRecommendationsResponse,
+): response is CareerRecommendationsResponse & { status: 'INSUFFICIENT_DATA' } {
+  return response.status === 'INSUFFICIENT_DATA'
 }
 
 export function getCareerRecommendations(limit?: number): Promise<CareerRecommendationsResponse> {
@@ -580,12 +744,22 @@ export interface ChallengeLatestAttempt {
   submittedAt: string
 }
 
+/**
+ * Backend-computed relevance, derived from the challenge_skills table:
+ * RECOMMENDED builds a skill the participant's target career requires,
+ * BUILDING builds a skill they already have, EXPLORING has no overlap yet.
+ * Every catalogue challenge is always returned - this only orders and labels.
+ */
+export type ChallengeRelevance = 'RECOMMENDED' | 'BUILDING' | 'EXPLORING'
+
 export interface ChallengeListItem {
   id: string
   title: string
   description: string
   difficulty: ChallengeDifficulty
   skills: ChallengeSkillRef[]
+  relevance: ChallengeRelevance
+  relevanceReason: string
   latestAttempt: ChallengeLatestAttempt | null
 }
 

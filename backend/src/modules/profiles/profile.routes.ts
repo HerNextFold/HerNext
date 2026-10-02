@@ -113,6 +113,63 @@ const upsertProfileBodySchema = {
   },
 } as const;
 
+const onboardingStatusSchema = {
+  type: 'object',
+  required: ['completed', 'completedAt'],
+  additionalProperties: false,
+  properties: {
+    completed: {
+      type: 'boolean',
+      description:
+        'True only after a full POST /onboarding submission committed. Never inferred from the profile row existing.',
+    },
+    completedAt: { type: ['string', 'null'], format: 'date-time' },
+  },
+} as const;
+
+const completeOnboardingBodySchema = {
+  type: 'object',
+  required: [
+    'currentOccupation',
+    'industry',
+    'yearsOfExperience',
+    'employmentType',
+    'targetCareerId',
+  ],
+  additionalProperties: false,
+  properties: {
+    currentOccupation: { type: 'string', minLength: 1, maxLength: 200 },
+    industry: { type: 'string', minLength: 1, maxLength: 200 },
+    yearsOfExperience: { type: 'number', minimum: 0, maximum: 100 },
+    employmentType: { type: 'string', enum: [...EMPLOYMENT_TYPES] },
+    education: { type: ['string', 'null'], maxLength: 300 },
+    careerInterests: {
+      type: ['array', 'null'],
+      maxItems: 20,
+      items: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+    country: { type: 'string', minLength: 1, maxLength: 100 },
+    state: { type: ['string', 'null'], maxLength: 100 },
+    targetCareerId: { type: 'string', format: 'uuid' },
+    skillIds: { type: ['array'], maxItems: 50, items: uuidSchema() },
+    experience: {
+      type: ['object', 'null'],
+      description:
+        'Omit or send null when the participant has no genuine experience to record. Never fabricated.',
+      additionalProperties: false,
+      properties: {
+        title: { type: 'string', minLength: 1, maxLength: 200 },
+        description: { type: 'string', minLength: 1, maxLength: 5000 },
+        organization: { type: ['string', 'null'], maxLength: 200 },
+        years: { type: ['number', 'null'], minimum: 0, maximum: 100 },
+        employmentType: { type: 'string', enum: [...EMPLOYMENT_TYPES] },
+        startDate: { type: ['string', 'null'], format: 'date' },
+        endDate: { type: ['string', 'null'], format: 'date' },
+      },
+    },
+  },
+} as const;
+
 export function registerProfileModule(app: FastifyInstance, service: ProfileService): void {
   const controller = new ProfileController(service);
 
@@ -170,6 +227,68 @@ export function registerProfileModule(app: FastifyInstance, service: ProfileServ
           },
         },
         (request, reply) => controller.upsert(request, reply),
+      );
+
+      scope.post(
+        '/onboarding',
+        {
+          preHandler: scope.authenticate,
+          schema: {
+            tags: ['Profile'],
+            summary: 'Complete onboarding atomically for the authenticated participant',
+            description:
+              'Validates and commits the profile, self-reported skills, target career, optional experience and the explicit onboarding completion marker in a single transaction. A failed submission leaves no partial profile behind.',
+            operationId: 'onboardingComplete',
+            security: bearerAuth,
+            body: bodySchema(
+              'Full onboarding submission',
+              completeOnboardingBodySchema,
+              {
+                currentOccupation: 'Software Developer',
+                industry: 'Technology & Software',
+                yearsOfExperience: 4,
+                employmentType: 'EMPLOYED',
+                education: "Bachelor's Degree",
+                careerInterests: ['Product', 'Technology'],
+                country: 'Nigeria',
+                state: 'Lagos',
+                targetCareerId: '00000000-0000-4000-8000-000000000000',
+                skillIds: [],
+                experience: {
+                  title: 'Software Developer',
+                  description: 'Built and shipped customer-facing web applications.',
+                  employmentType: 'EMPLOYED',
+                  years: 4,
+                },
+              },
+            ),
+            response: {
+              200: okResponse('Onboarding completed', careerProfileViewSchema),
+              400: errResponse('Invalid request data'),
+              401: errResponse('Unauthenticated'),
+              404: errResponse('Target career or participant profile not found'),
+            },
+          },
+        },
+        (request, reply) => controller.complete(request, reply),
+      );
+
+      scope.get(
+        '/onboarding/status',
+        {
+          preHandler: scope.authenticate,
+          schema: {
+            tags: ['Profile'],
+            summary: 'Get the authenticated participant onboarding completion state',
+            operationId: 'onboardingStatus',
+            security: bearerAuth,
+            response: {
+              200: okResponse('Onboarding status', onboardingStatusSchema),
+              401: errResponse('Unauthenticated'),
+            },
+          },
+        },
+        (request, reply) => controller.status(request, reply),
       );
     },
     { prefix: '/api/v1' },

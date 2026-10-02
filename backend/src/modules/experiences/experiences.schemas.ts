@@ -9,7 +9,7 @@ export const employmentTypeSchema = z.enum([
   'INFORMAL_WORKER',
 ]);
 
-const optionalDate = z
+export const optionalDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
   .transform((value) => new Date(`${value}T00:00:00.000Z`))

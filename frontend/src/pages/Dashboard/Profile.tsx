@@ -17,7 +17,15 @@ import {
 } from 'lucide-react';
 import { useUserContext } from '../../context/UserContext';
 import Button from '../../components/Button';
-import { ApiError, getProfile, type CareerProfile, type EmploymentType } from '../../lib/api';
+import {
+  ApiError,
+  createExperience,
+  getProfile,
+  listExperiences,
+  type CareerProfile,
+  type EmploymentType,
+  type ExperienceRecord,
+} from '../../lib/api';
 
 const EMPLOYMENT_LABELS: Record<EmploymentType, string> = {
   EMPLOYED: 'Employed',
@@ -49,6 +57,24 @@ export default function Profile() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
+  /**
+   * Work experience is editable here, not only during onboarding.
+   *
+   * The AI Career Impact Assessment assesses a participant's *responsibilities*
+   * (docs/AI_SPEC.md §8), and an experience record is where those live. Onboarding
+   * deliberately makes experience optional - not everyone has work history to
+   * enter yet, and forcing a fake entry would be worse. But that means a
+   * participant who skipped it needs a legitimate way to add one later, otherwise
+   * the assessment is permanently unreachable for them.
+   */
+  const [experiences, setExperiences] = useState<ExperienceRecord[]>([]);
+  const [isAddingExperience, setIsAddingExperience] = useState(false);
+  const [expTitle, setExpTitle] = useState('');
+  const [expDescription, setExpDescription] = useState('');
+  const [expEmploymentType, setExpEmploymentType] = useState<EmploymentType>('EMPLOYED');
+  const [expError, setExpError] = useState('');
+  const [isSavingExperience, setIsSavingExperience] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -66,6 +92,40 @@ export default function Profile() {
     void load();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listExperiences()
+      .then(({ experiences: rows }) => { if (!cancelled) setExperiences(rows); })
+      .catch(() => { if (!cancelled) setExperiences([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleAddExperience = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setExpError('');
+    // The backend enforces both of these too; checking here only avoids a
+    // pointless round trip. It never invents a placeholder value.
+    if (!expTitle.trim()) { setExpError('Enter the job title you held.'); return; }
+    if (!expDescription.trim()) { setExpError('Describe what you actually did.'); return; }
+
+    setIsSavingExperience(true);
+    try {
+      const created = await createExperience({
+        title: expTitle.trim(),
+        description: expDescription.trim(),
+        employmentType: expEmploymentType,
+      });
+      setExperiences((prev) => [created, ...prev]);
+      setExpTitle('');
+      setExpDescription('');
+      setIsAddingExperience(false);
+    } catch (err) {
+      setExpError(err instanceof ApiError ? err.message : 'Could not save your experience.');
+    } finally {
+      setIsSavingExperience(false);
+    }
+  };
 
   if (user.fullName !== syncedName) {
     setSyncedName(user.fullName);
@@ -397,6 +457,130 @@ export default function Profile() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Work Experience - editable after onboarding */}
+      <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-sm space-y-5">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <h3 className="text-sm font-bold text-[#2D1B4E] uppercase tracking-wider flex items-center gap-2">
+            <Briefcase size={18} className="text-[#8C3F96]" />
+            Work Experience
+          </h3>
+          {!isAddingExperience && (
+            <Button
+              type="button"
+              onClick={() => setIsAddingExperience(true)}
+              className="text-xs font-semibold"
+            >
+              Add experience
+            </Button>
+          )}
+        </div>
+
+        {experiences.length === 0 && !isAddingExperience && (
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500 leading-relaxed">
+              You haven&apos;t added any work experience yet. It is optional, but the AI Career
+              Assessment needs it: it reads what you actually did in order to assess automation
+              exposure, so we won&apos;t guess at it.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/assessment')}
+              className="text-xs font-semibold text-[#8C3F96] underline hover:text-[#2D1B4E]"
+            >
+              See why this matters
+            </button>
+          </div>
+        )}
+
+        {experiences.length > 0 && (
+          <div className="space-y-3">
+            {experiences.map((exp) => (
+              <div key={exp.id} className="p-4 rounded-2xl bg-purple-50/40 border border-purple-100/80">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-xs font-bold text-gray-800">{exp.title}</h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-[#8C3F96]">
+                    {EMPLOYMENT_LABELS[exp.employmentType] ?? exp.employmentType}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {exp.organization || 'Organization not specified'}
+                </p>
+                <p className="text-[11px] text-gray-600 leading-relaxed mt-2 whitespace-pre-wrap">
+                  {exp.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {isAddingExperience && (
+          <form onSubmit={handleAddExperience} className="space-y-4 pt-2">
+            {expError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                {expError}
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600">
+                Job title
+              </label>
+              <input
+                type="text"
+                value={expTitle}
+                onChange={(e) => setExpTitle(e.target.value)}
+                maxLength={200}
+                placeholder="e.g. Cashier"
+                className="mt-1.5 w-full rounded-xl border border-purple-100 bg-slate-50/50 px-3.5 py-2.5 text-sm text-gray-800 outline-none focus:border-[#8C3F96] focus:bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600">
+                What you actually did
+              </label>
+              <textarea
+                value={expDescription}
+                onChange={(e) => setExpDescription(e.target.value)}
+                maxLength={5000}
+                rows={4}
+                placeholder="Describe your real tasks. This is what the AI assesses, so write what happened - do not add anything you did not do."
+                className="mt-1.5 w-full rounded-xl border border-purple-100 bg-slate-50/50 px-3.5 py-2.5 text-sm text-gray-800 outline-none focus:border-[#8C3F96] focus:bg-white resize-y"
+              />
+              <p className="mt-1 text-[10px] text-gray-400">
+                Required. Be specific about your tasks - it produces a far more useful assessment.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600">
+                Employment type
+              </label>
+              <select
+                value={expEmploymentType}
+                onChange={(e) => setExpEmploymentType(e.target.value as EmploymentType)}
+                className="mt-1.5 w-full rounded-xl border border-purple-100 bg-slate-50/50 px-3.5 py-2.5 text-sm text-gray-800 outline-none focus:border-[#8C3F96] focus:bg-white"
+              >
+                {(Object.keys(EMPLOYMENT_LABELS) as EmploymentType[]).map((value) => (
+                  <option key={value} value={value}>
+                    {EMPLOYMENT_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={isSavingExperience} className="text-xs font-semibold">
+                {isSavingExperience ? 'Saving…' : 'Save experience'}
+              </Button>
+              <button
+                type="button"
+                onClick={() => { setIsAddingExperience(false); setExpError(''); }}
+                className="text-xs font-semibold text-gray-500 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

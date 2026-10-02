@@ -97,6 +97,53 @@ export function buildReturnUrl(returnTo: string | null): string {
 }
 
 /**
+ * Clears the HerNext session keys and the in-memory user cache, without
+ * navigating anywhere.
+ *
+ * Only the two HerNext keys are removed - never `localStorage.clear()`, which
+ * would destroy unrelated data belonging to the same origin.
+ *
+ * `SESSION_ENDED_EVENT` lets UserContext drop its in-memory copy, which matters
+ * because the provider's save effect would otherwise write the stale user
+ * straight back to storage.
+ *
+ * Used by explicit sign-out and by a successful sign-in, so a previous
+ * participant's cached name and onboarding answers can never be inherited by
+ * the next person to use the same browser.
+ */
+export function clearSession(): void {
+  if (!isBrowser) return
+  try {
+    localStorage.removeItem(ACCESS_TOKEN_KEY)
+    localStorage.removeItem(USER_SESSION_KEY)
+    window.dispatchEvent(new Event(SESSION_ENDED_EVENT))
+  } catch {
+    // Storage being unavailable must not stop the caller from continuing.
+  }
+}
+
+/**
+ * Starts a new session after a successful sign-in or email verification.
+ *
+ * Any previous session is cleared *first*. Without that, a second participant
+ * using the same browser would inherit the previous account's cached name and
+ * onboarding answers, because UserContext rehydrates them from
+ * `hernext_user_session` on mount. The clear must happen before the new token
+ * is stored and before the new user is written to context.
+ */
+export function startSession(accessToken: string): void {
+  clearSession();
+
+  if (!isBrowser) return;
+  try {
+    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  } catch {
+    // If the token cannot be persisted the app cannot call the API; the caller
+    // will fail on its first request and be redirected to sign-in.
+  }
+}
+
+/**
  * Ends the current session: drops the stale token and the stale user/onboarding
  * cache, then returns the participant to sign-in with a return path.
  *
@@ -117,16 +164,7 @@ export function endSession(reason: SessionEndReason): void {
 
   const currentPath = `${window.location.pathname}${window.location.search}`
 
-  try {
-    localStorage.removeItem(ACCESS_TOKEN_KEY)
-    localStorage.removeItem(USER_SESSION_KEY)
-
-    // Clear React's in-memory copy while it is still mounted, otherwise the
-    // provider's save effect can write the stale user straight back.
-    window.dispatchEvent(new Event(SESSION_ENDED_EVENT))
-  } catch {
-    // Storage being unavailable must not stop the redirect.
-  }
+  clearSession()
 
   // `replace` keeps the expired page out of history, so Back cannot return the
   // participant to a dashboard they are no longer signed in to.

@@ -37,6 +37,19 @@ interface UserContextType {
   updateUser: (updates: Partial<UserProfile>) => void;
   updateOnboarding: (updates: Partial<OnboardingState>) => void;
   resetUserSession: () => void;
+  /**
+   * Server-owned onboarding completion state.
+   *   null    - not yet known (still loading); route guards must wait
+   *   false   - the backend has no completed onboarding for this account
+   *   true    - POST /onboarding committed for this account
+   *
+   * This is deliberately NOT persisted to localStorage and NOT derived from the
+   * `onboarding` display cache. Completion used to be inferred from a
+   * career_profiles row existing, which also happened when a failed onboarding
+   * left a half-written profile behind.
+   */
+  onboardingCompleted: boolean | null;
+  setOnboardingCompleted: (completed: boolean | null) => void;
 }
 
 export const formatNameFromEmail = (emailStr?: string): string => {
@@ -105,7 +118,9 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return DEFAULT_ONBOARDING;
   });
 
-  // Save to localStorage whenever user or onboarding state changes
+  // Save to localStorage whenever user or onboarding state changes.
+  // onboardingCompleted is intentionally excluded: it is server-owned truth and
+  // a stale cached value would gate routes on the wrong account's history.
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -116,6 +131,8 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.warn('Failed to save user session to localStorage', e);
     }
   }, [user, onboarding]);
+
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
 
   const updateUser = (updates: Partial<UserProfile>) => {
     setUser((prev) => {
@@ -141,6 +158,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const resetUserSession = useCallback(() => {
     setUser(DEFAULT_USER);
     setOnboarding(DEFAULT_ONBOARDING);
+    setOnboardingCompleted(null);
     try {
       localStorage.removeItem(USER_SESSION_KEY);
     } catch (e) {
@@ -169,6 +187,8 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         updateUser,
         updateOnboarding,
         resetUserSession,
+        onboardingCompleted,
+        setOnboardingCompleted,
       }}
     >
       {children}

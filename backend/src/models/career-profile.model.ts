@@ -11,8 +11,21 @@ export interface CareerProfileRow {
   employmentType: EmploymentType;
   careerInterests: string[] | null;
   targetCareerId: string | null;
+  onboardingCompletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * Explicit onboarding completion state (migration 008).
+ *
+ * A "career_profiles" row existing does NOT mean the participant finished
+ * onboarding: the profile can be written by a partial/failed submission. Only
+ * POST /api/v1/onboarding sets this column, inside the same transaction that
+ * persists the rest of the onboarding payload.
+ */
+export interface OnboardingStatusRow {
+  onboardingCompletedAt: Date | null;
 }
 
 /**
@@ -44,6 +57,12 @@ export interface SaveCareerProfileInput {
   employmentType: EmploymentType;
   careerInterests: string[] | null;
   targetCareerId: string | null;
+  /**
+   * When true the upsert also stamps "onboardingCompletedAt" = now(). Only the
+   * atomic onboarding flow sets this; PUT /profile leaves the existing value
+   * untouched so an ordinary profile edit cannot fake completion.
+   */
+  markOnboardingCompleted?: boolean;
 }
 
 /**
@@ -60,18 +79,24 @@ export async function upsertCareerProfile(
     db,
     `INSERT INTO "career_profiles"
        ("participantProfileId", "currentOccupation", "industry", "yearsOfExperience",
-        "education", "employmentType", "careerInterests", "targetCareerId")
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     ON CONFLICT ("participantProfileId") DO UPDATE SET
-       "currentOccupation" = EXCLUDED."currentOccupation",
-       "industry" = EXCLUDED."industry",
-       "yearsOfExperience" = EXCLUDED."yearsOfExperience",
-       "education" = EXCLUDED."education",
-       "employmentType" = EXCLUDED."employmentType",
-       "careerInterests" = EXCLUDED."careerInterests",
-       "targetCareerId" = EXCLUDED."targetCareerId",
-       "updatedAt" = now()
-     RETURNING *`,
+        "education", "employmentType", "careerInterests", "targetCareerId", "onboardingCompletedAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $9::boolean THEN now() ELSE NULL END)
+      ON CONFLICT ("participantProfileId") DO UPDATE SET
+        "currentOccupation" = EXCLUDED."currentOccupation",
+        "industry" = EXCLUDED."industry",
+        "yearsOfExperience" = EXCLUDED."yearsOfExperience",
+        "education" = EXCLUDED."education",
+        "employmentType" = EXCLUDED."employmentType",
+        "careerInterests" = EXCLUDED."careerInterests",
+        "targetCareerId" = EXCLUDED."targetCareerId",
+        -- On a repeat save the existing marker is preserved unless this call is
+        -- itself a completion, so an ordinary profile edit never clears it.
+        "onboardingCompletedAt" = CASE
+          WHEN $9::boolean THEN now()
+          ELSE "career_profiles"."onboardingCompletedAt"
+        END,
+        "updatedAt" = now()
+      RETURNING *`,
     [
       input.participantProfileId,
       input.currentOccupation,
@@ -81,10 +106,32 @@ export async function upsertCareerProfile(
       input.employmentType,
       input.careerInterests,
       input.targetCareerId,
+      input.markOnboardingCompleted ?? false,
     ],
   );
   if (row === null) {
     throw new Error('upsertCareerProfile returned no row');
   }
   return row;
+}
+
+/**
+ * Reads the explicit onboarding completion timestamp for a participant.
+ *
+ * Returns null when the participant has no career profile row at all, which is
+ * also "not onboarded". Never infers completion from row existence.
+ */
+export async function findOnboardingStatusByUserId(
+  db: Db | undefined,
+  userId: string,
+): Promise<OnboardingStatusRow | null> {
+  return queryRow<OnboardingStatusRow>(
+    db ?? getPool(),
+    `SELECT cp."onboardingCompletedAt"
+     FROM "career_profiles" cp
+     JOIN "participant_profiles" pp ON pp."id" = cp."participantProfileId"
+     WHERE pp."userId" = $1
+     LIMIT 1`,
+    [userId],
+  );
 }

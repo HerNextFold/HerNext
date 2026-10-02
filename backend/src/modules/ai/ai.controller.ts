@@ -50,8 +50,11 @@ export class AiController {
 
   async getCareerRecommendations(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> {
     const { limit } = parseOrThrow(limitQuerySchema, request.query);
-    const data = await this.service.getCareerRecommendations(request.user.id, limit);
-    return sendOk(reply, { recommendations: data });
+    // The envelope is forwarded whole. Sending only `recommendations` here would
+    // drop `status`, so a client could not tell "you have no ranking" from "your
+    // top match happens to be an empty list" - and would have nothing to tell
+    // the participant about what is missing.
+    return sendOk(reply, await this.service.getCareerRecommendations(request.user.id, limit));
   }
 
   async runSkillGaps(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> {
