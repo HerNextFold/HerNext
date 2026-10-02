@@ -295,7 +295,13 @@ const DEFAULT_PRESET: RolePreset = {
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const { onboarding, updateOnboarding, setOnboardingCompleted, onboardingCompleted } = useUserContext()
+  const {
+    onboarding,
+    updateOnboarding,
+    setOnboardingCompleted,
+    onboardingCompleted,
+    setCareerProfile,
+  } = useUserContext()
   const [currentStep, setCurrentStep] = useState<number>(1)
 
   // Someone who has already completed onboarding should be editing their profile
@@ -470,6 +476,7 @@ export default function Onboarding() {
       return
     }
 
+
     setIsSubmitting(true)
 
     const employmentType = mapWorkSituationToEmploymentType(workSituation)
@@ -482,7 +489,14 @@ export default function Onboarding() {
       // optional experience and the onboarding completion marker are validated
       // and committed together, so a failure can no longer leave a
       // half-written profile behind.
-      await completeOnboarding({
+      //
+      // This replaces the previous two-call flow (updateProfile, then
+      // createExperience). That flow posted `description: ""` whenever the
+      // participant had no experience to describe, which the backend rejected,
+      // and it could save the profile while losing the experience. There is no
+      // longer a partial-save state to report, so the committed profile is
+      // pushed into the shared careerProfile cache directly.
+      const savedProfile = await completeOnboarding({
         currentOccupation: currentRole.trim(),
         industry: industry.trim(),
         yearsOfExperience,
@@ -502,6 +516,8 @@ export default function Onboarding() {
                 employmentType,
               },
       })
+      setCareerProfile(savedProfile)
+
 
       // The local onboarding cache mirrors what the server just committed. It
       // is a display cache only; the server remains the source of truth for
