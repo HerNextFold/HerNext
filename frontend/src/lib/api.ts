@@ -83,6 +83,29 @@ export function isSessionExpiredError(err: unknown): boolean {
   return err instanceof ApiError && err.kind === 'auth'
 }
 
+/**
+ * Turns any thrown value into a message worth showing the participant.
+ *
+ * `ApiError.message` already carries the backend's own message when one was
+ * sent, but it falls back to a generic string in two cases that need different
+ * wording in the UI:
+ *
+ * - `details` from Fastify/Zod validation holds the actual reason, which is far
+ *   more actionable than "Invalid request data".
+ * - status 0 means the request never reached the server. That is a network
+ *   problem and must not be presented as a server-side rejection.
+ */
+export function describeApiError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    if (err.kind === 'network') {
+      return 'We could not reach HerNext. Check your connection and try again.'
+    }
+    if (err.firstDetailMessage) return err.firstDetailMessage
+    if (err.message) return err.message
+  }
+  return fallback
+}
+
 interface ApiSuccess<T> {
   success: true
   data: T

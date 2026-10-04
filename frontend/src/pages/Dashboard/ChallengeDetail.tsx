@@ -1,10 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Plus, Trash2, XCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Plus,
+  Trash2,
+  XCircle,
+  Loader2,
+  Info,
+  FileCheck2,
+} from 'lucide-react';
 import PurpleBackgroundDots from '../../components/dashboard/PurpleBackgroundDots';
 import {
-  ApiError,
+  describeApiError,
   getChallenge,
   submitChallenge,
   type ChallengeDifficulty,
@@ -237,7 +246,7 @@ const ChallengeDetail: React.FC = () => {
         if (!cancelled) setChallenge(data);
       } catch (err) {
         if (cancelled) return;
-        setLoadError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+        setLoadError(describeApiError(err, 'We could not load this challenge. Please try again.'));
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -257,7 +266,7 @@ const ChallengeDetail: React.FC = () => {
       const outcome = await submitChallenge(id, answer);
       setResult(outcome);
     } catch (err) {
-      setSubmitError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setSubmitError(describeApiError(err, 'We could not submit your answer. Please try again.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -293,8 +302,9 @@ const ChallengeDetail: React.FC = () => {
         </motion.div>
 
         {isLoading && (
-          <motion.div variants={item} className="text-xs text-gray-500">
-            Loading challenge...
+          <motion.div variants={item} className="flex items-center gap-2.5 text-xs text-gray-500 font-medium">
+            <Loader2 size={16} className="animate-spin" />
+            Loading challenge…
           </motion.div>
         )}
 
@@ -328,6 +338,31 @@ const ChallengeDetail: React.FC = () => {
                   ))}
                 </div>
               )}
+              {challenge.relevance !== 'EXPLORING' ? (
+                <p className="text-[11px] text-gray-500 leading-relaxed flex items-start gap-1.5">
+                  <Info size={12} className="shrink-0 mt-0.5 text-gray-400" />
+                  <span>{challenge.relevanceReason}</span>
+                </p>
+              ) : null}
+
+              {challenge.skills.length > 0 ? (
+                <div className="bg-[#FAF8FC] border border-purple-100/70 rounded-xl px-3 py-2.5 flex items-start gap-2">
+                  <FileCheck2 size={14} className="text-[#8C3F96] shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-gray-600 leading-relaxed font-medium">
+                    Pass this and HerNext records{' '}
+                    <strong className="text-[#2D1B4E]">
+                      {challenge.skills.length} piece{challenge.skills.length === 1 ? '' : 's'} of
+                      evidence
+                    </strong>{' '}
+                    for{' '}
+                    {challenge.skills.length === 1
+                      ? challenge.skills[0].skillName
+                      : challenge.skills.map((s) => s.skillName).join(', ')}{' '}
+                    on your Career Passport.
+                  </p>
+                </div>
+              ) : null}
+
               {challenge.latestAttempt && !result && (
                 <div className="text-xs text-gray-500 font-medium pt-2 border-t border-purple-100/60">
                   Last attempt: <strong className="text-[#2D1B4E]">{challenge.latestAttempt.status}</strong>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowRight,
@@ -15,13 +15,15 @@ import {
   PlayCircle,
   Loader2,
   Info,
-  BookOpen
+  BookOpen,
+  PencilLine,
+  WifiOff,
 } from 'lucide-react';
 import PurpleBackgroundDots from '../../components/dashboard/PurpleBackgroundDots';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import {
-  ApiError,
+  describeApiError,
   getCareerRecommendations,
   getCurrentRoadmap,
   getSkillGaps,
@@ -30,14 +32,24 @@ import {
 } from '../../lib/api';
 import {
   getLearningResources,
+  getPrimaryVideo,
+  videoEmbedUrl,
   type LearningResource,
   type LearningResourceProvider,
+  type LearningResourceType,
 } from '../../lib/learningResources';
+import { getSkillLesson } from '../../lib/skillLessons';
 
 const PROVIDER_ICON: Record<LearningResourceProvider, typeof PlayCircle> = {
   YouTube: PlayCircle,
   Article: FileText,
   Course: GraduationCap,
+};
+
+const TYPE_LABEL: Record<LearningResourceType, string> = {
+  video: 'Video',
+  article: 'Further reading',
+  course: 'Course',
 };
 
 /**
@@ -60,6 +72,20 @@ export const LessonOverview: React.FC = () => {
   const [roadmapProgress, setRoadmapProgress] = useState<number | null>(null);
   const [isCompleting, setIsCompleting] = useState(false);
   const [completeError, setCompleteError] = useState('');
+
+  // Static, name-keyed content, so it is derived rather than fetched. A custom
+  // or unknown skill resolves to null and renders an honest "not yet" state.
+  const lesson = useMemo(() => getSkillLesson(skillName), [skillName]);
+  const videos = useMemo(
+    () => resources.filter((r) => r.type === 'video' && r.videoId),
+    [resources],
+  );
+  const furtherReading = useMemo(() => resources.filter((r) => r.type !== 'video'), [resources]);
+  const primaryVideo = useMemo(
+    () => videos[0] ?? getPrimaryVideo(skillName),
+    [videos, skillName],
+  );
+  const extraVideos = useMemo(() => videos.slice(1), [videos]);
 
   useEffect(() => {
     if (!taskId) return;
@@ -104,9 +130,7 @@ export const LessonOverview: React.FC = () => {
       } catch (err) {
         if (cancelled) return;
         setLoadError(
-          err instanceof ApiError
-            ? err.message
-            : 'We could not load this roadmap task. Please try again.',
+          describeApiError(err, 'We could not load this roadmap task. Please try again.'),
         );
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -137,11 +161,7 @@ export const LessonOverview: React.FC = () => {
           : prev,
       );
     } catch (err) {
-      setCompleteError(
-        err instanceof ApiError
-          ? err.message
-          : 'We could not update this task. Please try again.',
-      );
+      setCompleteError(describeApiError(err, 'We could not update this task. Please try again.'));
     } finally {
       setIsCompleting(false);
     }
@@ -172,60 +192,213 @@ export const LessonOverview: React.FC = () => {
     </div>
   );
 
-  const renderResources = () => (
-    <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-purple-100/80 shadow-xs space-y-5">
-      <div className="space-y-1">
-        <h2 className="text-base sm:text-lg font-extrabold text-[#2D1B4E]">
-          Learning resources for {skillName}
-        </h2>
-        <p className="text-xs text-gray-500 font-medium">
-          These resources are connected to a skill in your roadmap. They open on the provider&apos;s
-          website.
-        </p>
-      </div>
+  /**
+   * HerNext's own lesson for the skill. This is the part the participant can
+   * complete without leaving the page, so it comes before any external link.
+   */
+  const renderLesson = () => {
+    if (!lesson) return null;
+    return (
+      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-purple-100/80 shadow-xs space-y-5">
+        <div className="space-y-1">
+          <h2 className="text-base sm:text-lg font-extrabold text-[#2D1B4E]">
+            What {skillName} actually involves
+          </h2>
+          <p className="text-xs text-gray-500 font-medium">
+            A short lesson from HerNext. The resources below add to it, they are not a substitute
+            for it.
+          </p>
+        </div>
 
-      <ul className="space-y-3">
-        {resources.map((resource) => {
-          const Icon = PROVIDER_ICON[resource.provider];
-          return (
-            <li
-              key={resource.url}
-              className="bg-[#FAF8FC] border border-purple-100/70 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-            >
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-white border border-purple-100 text-[#8C3F96] flex items-center justify-center shrink-0">
-                  <Icon size={18} />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs sm:text-sm font-bold text-[#2D1B4E]">
-                      {resource.title}
-                    </span>
-                    <span className="inline-flex items-center gap-1 bg-purple-50 text-[#8C3F96] text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-100">
-                      {resource.provider}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
-                    {resource.summary}
-                  </p>
-                </div>
+        <div className="bg-[#FAF8FC] border border-purple-100/70 rounded-2xl p-4">
+          <span className="text-[10px] font-extrabold text-[#9E4733] uppercase tracking-wider block mb-1">
+            Why this matters
+          </span>
+          <p className="text-xs sm:text-sm text-gray-700 leading-relaxed font-medium">
+            {lesson.whyItMatters}
+          </p>
+        </div>
+
+        <div className="space-y-2.5">
+          <h3 className="text-xs font-extrabold text-[#2D1B4E] uppercase tracking-wider">
+            What you&apos;ll learn
+          </h3>
+          <div className="space-y-2">
+            {lesson.whatYouWillLearn.map((point, idx) => (
+              <div key={idx} className="flex items-start gap-2.5 text-xs text-gray-700">
+                <CheckCircle2 size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                <span className="leading-relaxed font-medium">{point}</span>
               </div>
+            ))}
+          </div>
+        </div>
 
+        <div className="space-y-2.5">
+          <h3 className="text-xs font-extrabold text-[#2D1B4E] uppercase tracking-wider">
+            Key takeaways
+          </h3>
+          <ul className="space-y-1.5">
+            {lesson.keyTakeaways.map((point, idx) => (
+              <li
+                key={idx}
+                className="text-xs text-gray-700 leading-relaxed font-medium flex gap-2"
+              >
+                <span className="text-[#8C3F96] font-extrabold shrink-0">—</span>
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="bg-[#FDF2F5]/80 border border-[#FDF2F5] rounded-2xl p-4 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-xl bg-[#F05A7E]/15 text-[#F05A7E] flex items-center justify-center shrink-0">
+            <PencilLine size={16} />
+          </div>
+          <div>
+            <span className="text-[10px] font-extrabold text-[#F05A7E] uppercase tracking-wider block">
+              Try this while you learn
+            </span>
+            <p className="text-xs text-gray-700 leading-relaxed font-medium mt-0.5">
+              {lesson.practicePrompt}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  /**
+   * The primary video plays here, so watching the lesson does not require
+   * leaving HerNext. The provider link stays visible for attribution and for
+   * anyone who prefers YouTube's own player.
+   */
+  const renderVideo = () => {
+    if (!primaryVideo?.videoId) return null;
+    return (
+      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-purple-100/80 shadow-xs space-y-4">
+        <div className="space-y-1">
+          <h2 className="text-base sm:text-lg font-extrabold text-[#2D1B4E]">
+            Watch: {primaryVideo.title}
+          </h2>
+          <p className="text-xs text-gray-500 font-medium">
+            {primaryVideo.provider}
+            {primaryVideo.durationMinutes ? ` · ${primaryVideo.durationMinutes} min` : ''}
+          </p>
+        </div>
+
+        <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-purple-100/80 bg-black">
+          <iframe
+            src={videoEmbedUrl(primaryVideo.videoId)}
+            title={primaryVideo.title}
+            loading="lazy"
+            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="absolute inset-0 w-full h-full"
+          />
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <p className="text-xs text-gray-600 leading-relaxed font-medium">
+            {primaryVideo.summary}
+          </p>
+          <a
+            href={primaryVideo.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 inline-flex items-center justify-center gap-1.5 text-[11px] font-bold text-[#8C3F96] hover:text-[#5B2975] border border-purple-100 bg-purple-50 px-3.5 py-2 rounded-xl transition-colors"
+          >
+            Open on {primaryVideo.provider}
+            <ExternalLink size={12} />
+          </a>
+        </div>
+
+        {extraVideos.length > 0 ? (
+          <div className="space-y-2 pt-1 border-t border-purple-100/60">
+            <h3 className="text-[10px] font-extrabold text-[#2D1B4E] uppercase tracking-wider pt-2">
+              More videos
+            </h3>
+            {extraVideos.map((video) => (
               <a
-                href={resource.url}
+                key={video.url}
+                href={video.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="shrink-0 inline-flex items-center justify-center gap-1.5 bg-[#2D1B4E] hover:bg-[#431F69] text-white font-bold text-[11px] px-4 py-2.5 rounded-xl transition-colors"
+                className="flex items-center gap-2.5 text-xs text-gray-700 hover:text-[#5B2975] transition-colors"
               >
-                Open Resource
-                <ExternalLink size={13} />
+                <PlayCircle size={15} className="text-[#8C3F96] shrink-0" />
+                <span className="font-semibold">{video.title}</span>
+                <ExternalLink size={11} className="text-gray-400 shrink-0" />
               </a>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  /**
+   * Articles and courses. These are never embedded or copied — HerNext has
+   * already taught the skill above, and these are the provider's own material
+   * for going deeper.
+   */
+  const renderFurtherReading = () => {
+    if (furtherReading.length === 0) return null;
+    return (
+      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-purple-100/80 shadow-xs space-y-4">
+        <div className="space-y-1">
+          <h2 className="text-base sm:text-lg font-extrabold text-[#2D1B4E]">Go deeper</h2>
+          <p className="text-xs text-gray-500 font-medium">
+            Reference material from {skillName} providers, on their own sites.
+          </p>
+        </div>
+
+        <ul className="space-y-3">
+          {furtherReading.map((resource) => {
+            const Icon = PROVIDER_ICON[resource.provider];
+            return (
+              <li
+                key={resource.url}
+                className="bg-[#FAF8FC] border border-purple-100/70 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-white border border-purple-100 text-[#8C3F96] flex items-center justify-center shrink-0">
+                    <Icon size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-[#2D1B4E]">
+                        {resource.title}
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-purple-50 text-[#8C3F96] text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-100">
+                        {TYPE_LABEL[resource.type]}
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-white text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-100">
+                        {resource.provider}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                      {resource.summary}
+                    </p>
+                  </div>
+                </div>
+
+                <a
+                  href={resource.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 inline-flex items-center justify-center gap-1.5 bg-[#2D1B4E] hover:bg-[#431F69] text-white font-bold text-[11px] px-4 py-2.5 rounded-xl transition-colors"
+                >
+                  {resource.type === 'course' ? 'Course details' : 'Read more'}
+                  <ExternalLink size={13} />
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
 
   const renderTaskPanel = () => {
     if (isLoading) {
@@ -240,8 +413,23 @@ export const LessonOverview: React.FC = () => {
     if (loadError) {
       return (
         <div className="bg-white/95 backdrop-blur-md rounded-3xl p-8 border border-purple-100/80 shadow-xs space-y-3">
-          <h3 className="text-sm font-extrabold text-[#2D1B4E]">We could not load this task</h3>
-          <p className="text-xs text-gray-600 leading-relaxed">{loadError}</p>
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#F05A7E]/15 text-[#F05A7E] flex items-center justify-center shrink-0">
+              <WifiOff size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-[#2D1B4E]">
+                We could not load this task
+              </h3>
+              <p className="text-xs text-gray-600 leading-relaxed mt-1">{loadError}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-[11px] font-bold text-[#8C3F96] hover:text-[#5B2975] cursor-pointer"
+          >
+            Try again
+          </button>
         </div>
       );
     }
@@ -292,7 +480,13 @@ export const LessonOverview: React.FC = () => {
           </p>
         </div>
 
-        {skillName && resources.length > 0 ? renderResources() : renderNoResources()}
+        {/* HerNext's own lesson first, then the video, then supporting links. */}
+        {lesson ? renderLesson() : null}
+        {renderVideo()}
+        {renderFurtherReading()}
+
+        {/* Only when the skill is known but genuinely has nothing attached. */}
+        {!lesson && resources.length === 0 ? renderNoResources() : null}
 
         {/* Task completion: the existing backend endpoint, nothing local. */}
         <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 border border-purple-100/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

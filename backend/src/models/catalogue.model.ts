@@ -27,6 +27,11 @@ export interface CareerPathRow {
   industry: string;
   description: string;
   level: string;
+  /**
+   * True when a participant named this career themselves (migration 010).
+   * Reserved for future use: no endpoint writes such a row yet.
+   */
+  isCustom: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,10 +76,19 @@ export async function listSkillsInCategories(
   );
 }
 
+/**
+ * The approved career catalogue, which is what the UI offers as options and
+ * what the recommendation engine ranks.
+ *
+ * Mirrors listSkills: participant-named careers live in the same table
+ * (migration 010) but are excluded here, so one person's custom career is
+ * never offered or ranked for anyone else. Lookups by id
+ * (findCareerById, findCareerWithSkills) are deliberately unfiltered.
+ */
 export async function listCareers(db: Db | undefined): Promise<CareerPathRow[]> {
   return queryText<CareerPathRow>(
     db ?? getPool(),
-    'SELECT * FROM "career_paths" ORDER BY "name" ASC',
+    'SELECT * FROM "career_paths" WHERE "isCustom" = false ORDER BY "name" ASC',
   );
 }
 
