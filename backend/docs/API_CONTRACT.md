@@ -494,7 +494,11 @@ Required.
       "Fintech",
       "Banking Operations"
     ],
-    "targetCareer": null
+    "targetCareer": {
+      "id": "uuid",
+      "name": "Fintech Operations Associate",
+      "isCustom": false
+    }
   }
 }
 ```
@@ -503,6 +507,11 @@ Required.
 from the `users` row — the same source as `GET /auth/me` — so location is never
 duplicated inside `career_profiles`. `state` is `null` when the user has not
 chosen one.
+
+`targetCareer` is `null` until the participant chooses one. When set, it is the
+career the participant is working towards. `isCustom` distinguishes a
+participant-named career (`true`, scoped to that participant only) from an
+approved catalogue career (`false`).
 
 ---
 
@@ -528,9 +537,22 @@ endpoint.
     "Banking Operations"
   ],
   "country": "Nigeria",
-  "state": "Lagos"
+  "state": "Lagos",
+  "targetCareerId": "uuid",
+  "targetCareerName": null
 }
 ```
+
+### Target career rules
+
+* Exactly one of `targetCareerId` and `targetCareerName` may be supplied.
+* `targetCareerId` references a catalogue career, or a custom career the
+  authenticated participant owns.
+* `targetCareerName` (max 120 characters) names a career the participant wants
+  to work towards when it is not in the catalogue. It is stored as a custom
+  career owned by that participant (`isCustom: true`), appears only in that
+  participant's own views, and is never added to the shared catalogue.
+* Sending `"targetCareerId": null` clears the stored target career.
 
 ### Rules
 
@@ -542,6 +564,16 @@ endpoint.
   infer a clearing rule, so behaviour is never hidden from the caller.
 * Location is always written for the authenticated user only. A `userId` in the
   body is never trusted, and the body is strictly validated.
+
+### Errors
+
+* `400 VALIDATION_ERROR` when both `targetCareerId` and `targetCareerName` are
+  supplied, when the name has control characters, or the body is otherwise
+  invalid.
+* `404 RESOURCE_NOT_FOUND` when `targetCareerId` does not reference a career the
+  user can access.
+* `403 OWNERSHIP_ERROR` when `targetCareerId` references another participant's
+  custom career.
 
 ### Response
 
@@ -924,6 +956,23 @@ Identical shape to `POST /ai/skill-gaps/:careerId`, including the read-only
 `status`/`priority` fields described in docs/SCORING_LOGIC.md §9.
 
 Skill status is determined from the user's skills versus the career's required skills.
+
+### Custom careers
+
+A custom career is a participant-named target career (PRODUCT_SPEC §13):
+
+* It may only be used by its owning participant. Using another participant's
+  custom career id returns `403 OWNERSHIP_ERROR` on every skill-gap and roadmap
+  endpoint.
+* On first use, `POST /ai/skill-gaps/:careerId` (and roadmap generation)
+  lazily generates and persists the custom career's requirement skills once.
+  Repeating the call reuses them — no further AI call.
+* `GET /careers/:careerId/skill-gaps` is read-only and never triggers AI. For a
+  custom career whose requirements have not been generated yet it returns an
+  empty `skills` list.
+* When the AI provider is unavailable during generation, the endpoint fails
+  safe with `503 AI_SERVICE_ERROR` and stores nothing (a successful later
+  attempt is not duplicated).
 
 ---
 

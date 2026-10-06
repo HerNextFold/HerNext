@@ -343,21 +343,40 @@ It does not mean:
 
 # 9. CareerPath
 
-Approved career catalogue.
+Approved career catalogue, plus participant-named custom target careers
+(migration 011).
 
-The AI must recommend careers from this catalogue.
+The AI must recommend careers from this catalogue — custom careers are targets,
+never recommendations.
 
 ### Fields
 
-| Field       | Type     |
-| ----------- | -------- |
-| id          | UUID     |
-| name        | String   |
-| industry    | String   |
-| description | Text     |
-| level       | String   |
-| createdAt   | DateTime |
-| updatedAt   | DateTime |
+| Field       | Type             |
+| ----------- | ---------------- |
+| id          | UUID             |
+| name        | String (≤120)    |
+| industry    | String           |
+| description | Text             |
+| level       | String           |
+| isCustom    | Boolean          |
+| ownerUserId | UUID (nullable)  |
+| createdAt   | DateTime         |
+| updatedAt   | DateTime         |
+
+### Custom career ownership (migrations 010/011)
+
+* `isCustom = false` (and `ownerUserId IS NULL`): a curated catalogue career.
+  Unique by lowercase name via the partial index
+  `career_paths_catalogue_name_idx`.
+* `isCustom = true` (and `ownerUserId IS NOT NULL`): a career named by one
+  participant during onboarding/profile upsert. Owned via
+  `career_paths_custom_owner_check` (`"isCustom" = ("ownerUserId" IS NOT NULL)`)
+  and deleted with its owner (`ON DELETE CASCADE`). Unique per owner by
+  (`lower(name)`, `ownerUserId`) via `career_paths_custom_name_idx`, so two
+  participants may each hold a same-named custom career.
+* The shared catalogue list (`listCareers`) always filters `isCustom = false`.
+* Only the owning participant may use a custom career; anything else is
+  `OWNERSHIP_ERROR` (403).
 
 ### Initial Finance Careers
 

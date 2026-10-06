@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { employmentTypeSchema, optionalDate } from '../experiences/experiences.schemas.js';
+import {
+  MAX_CAREER_NAME_LENGTH,
+  invalidCareerNameReason,
+} from '../../common/utils/career-name.js';
 
 export const upsertProfileSchema = z
   .object({
@@ -10,6 +14,19 @@ export const upsertProfileSchema = z
     employmentType: employmentTypeSchema,
     careerInterests: z.array(z.string().trim().min(1).max(200)).max(20).nullable().optional(),
     targetCareerId: z.string().uuid('targetCareerId must be a valid UUID').nullable().optional(),
+    /**
+     * Alternative to targetCareerId: a career the participant names themselves
+     * (docs/PRODUCT_SPEC.md §13). It is matched against the approved catalogue
+     * first and otherwise stored as a participant-scoped custom career. Both
+     * fields cannot be set together; send null/omit both to clear the target.
+     */
+    targetCareerName: z
+      .string()
+      .trim()
+      .min(1, 'targetCareerName cannot be empty')
+      .max(MAX_CAREER_NAME_LENGTH)
+      .nullable()
+      .optional(),
     skillIds: z.array(z.string().uuid('skillIds must be valid UUIDs')).max(50).optional(),
     /**
      * Skills the participant typed themselves that are not in the approved
@@ -23,7 +40,19 @@ export const upsertProfileSchema = z
     country: z.string().trim().min(1, 'country cannot be empty').max(100).optional(),
     state: z.string().trim().min(1).max(100).nullable().optional(),
   })
-  .strict();
+  .strict()
+  .refine((data) => !(data.targetCareerId != null && data.targetCareerName != null), {
+    message: 'Provide either targetCareerId or targetCareerName, not both.',
+    path: ['targetCareerId'],
+  })
+  .refine(
+    (data) =>
+      data.targetCareerName == null || invalidCareerNameReason(data.targetCareerName) === null,
+    {
+      message: 'targetCareerName contains characters that are not allowed.',
+      path: ['targetCareerName'],
+    },
+  );
 
 export type UpsertProfileBody = z.infer<typeof upsertProfileSchema>;
 
@@ -64,11 +93,19 @@ export const completeOnboardingSchema = z
     country: z.string().trim().min(1, 'country cannot be empty').max(100).optional(),
     state: z.string().trim().min(1).max(100).nullable().optional(),
     /**
-     * Approved catalogue career id the participant is aiming at. Required for a
-     * meaningful recommendation score, so onboarding requires it explicitly
-     * rather than letting a catalogue default stand in for user intent.
+     * Approved catalogue career id the participant is aiming at. Exactly ONE of
+     * targetCareerId / targetCareerName is required: either the participant
+     * picks from the catalogue, or names their own career
+     * (docs/PRODUCT_SPEC.md §13), which is stored as a participant-scoped
+     * custom career. A catalogue default can never stand in for user intent.
      */
-    targetCareerId: z.string().uuid('targetCareerId must be a valid catalogue UUID'),
+    targetCareerId: z.string().uuid('targetCareerId must be a valid catalogue UUID').optional(),
+    targetCareerName: z
+      .string()
+      .trim()
+      .min(1, 'targetCareerName cannot be empty')
+      .max(MAX_CAREER_NAME_LENGTH)
+      .optional(),
     /**
      * Approved catalogue skill ids the participant actually reported. May be
      * empty, but is never populated with defaults on the client's behalf.
@@ -88,6 +125,23 @@ export const completeOnboardingSchema = z
     /** Omit or leave out for a participant with no real experience to record. */
     experience: onboardingExperienceSchema.nullable().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (data) =>
+      (data.targetCareerId !== undefined) !== (data.targetCareerName !== undefined),
+    {
+      message: 'Provide exactly one of targetCareerId or targetCareerName.',
+      path: ['targetCareerId'],
+    },
+  )
+  .refine(
+    (data) =>
+      data.targetCareerName === undefined ||
+      invalidCareerNameReason(data.targetCareerName) === null,
+    {
+      message: 'targetCareerName contains characters that are not allowed.',
+      path: ['targetCareerName'],
+    },
+  );
 
 export type CompleteOnboardingBody = z.infer<typeof completeOnboardingSchema>;

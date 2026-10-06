@@ -8,6 +8,7 @@ export interface TargetCareerView {
   name: string;
   industry: string;
   level: string;
+  isCustom: boolean;
 }
 
 export interface ExistingSkillView {
@@ -61,7 +62,13 @@ export function toProfileView(
     targetCareerId: profile.targetCareerId,
     targetCareer: targetCareer === null
       ? null
-      : { id: targetCareer.id, name: targetCareer.name, industry: targetCareer.industry, level: targetCareer.level },
+      : {
+          id: targetCareer.id,
+          name: targetCareer.name,
+          industry: targetCareer.industry,
+          level: targetCareer.level,
+          isCustom: targetCareer.isCustom,
+        },
     existingSkills: skills.map((s) => ({
       skillId: s.skillId,
       skillName: s.skillName,

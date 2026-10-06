@@ -216,19 +216,27 @@ export async function seedSkills(client: Db): Promise<Map<string, string>> {
 
 export async function seedCareers(client: Db, skillIds: Map<string, string>): Promise<void> {
   for (const career of CAREERS) {
+    // The catalogue careers are the rows with no owner (migration 011). The
+    // global UNIQUE name constraint was replaced by a partial unique index on
+    // lower(name) WHERE ownerUserId IS NULL, so an upsert can no longer target
+    // the whole table: insert the row if missing, then refresh catalogue rows
+    // only (never participant-owned ones) by that same index.
     await queryText(
       client,
       `INSERT INTO "career_paths" ("name", "industry", "description", "level")
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT ("name") DO UPDATE SET "industry" = EXCLUDED."industry", "description" = EXCLUDED."description", "level" = EXCLUDED."level"`,
+       ON CONFLICT DO NOTHING`,
       [career.name, career.industry, career.description, career.level],
     );
-    const careerRow = await queryText<{ id: string }>(
+    const refreshed = await queryText<{ id: string }>(
       client,
-      'SELECT "id" FROM "career_paths" WHERE "name" = $1',
-      [career.name],
+      `UPDATE "career_paths"
+       SET "industry" = $1, "description" = $2, "level" = $3, "updatedAt" = now()
+       WHERE lower("name") = lower($4) AND "ownerUserId" IS NULL
+       RETURNING "id"`,
+      [career.industry, career.description, career.level, career.name],
     );
-    const careerId = careerRow[0]?.id;
+    const careerId = refreshed[0]?.id;
     if (careerId === undefined) {
       throw new Error(`Career not found after insert: ${career.name}`);
     }

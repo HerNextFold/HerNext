@@ -635,11 +635,29 @@ It must not invent:
 * challenge IDs
 * qualifications
 * certifications
-* job titles outside the approved catalogue
+* job titles inside the approved career catalogue
 
 If AI suggests something outside the catalogue, reject or normalize it.
 
 Do not save unvalidated AI output.
+
+### Participant-named custom careers and skills
+
+The shared catalogue is reserved for curated HerNext entries (`career_paths` and
+`skills` rows where `isCustom = false`). AI never inserts into that catalogue.
+
+A participant is allowed to name their own target career (for example "Nurse to
+Health Data Analyst") instead of selecting a catalogue career. It is stored as
+an **owner-scoped** row (`isCustom = true` + `ownerUserId`, migration 011):
+
+* It never appears in the shared catalogue list (`GET /catalogue/careers`),
+  recommendations, or any other participant's data.
+* Other participants cannot read or use it: ownership is enforced with
+  `OWNERSHIP_ERROR` (403).
+* The AI may only be asked to derive the requirement skills for a career the
+  authenticated participant owns.
+* AI-derived skills that do not already exist in the approved catalogue are
+  stored as owner-scoped custom skills following the same rule.
 
 ---
 
@@ -744,6 +762,11 @@ The AI can explain:
 
 The AI must not independently invent a career and insert it into the career catalogue.
 
+A recommendation can never be a participant-named custom career. Custom careers
+are targets, not recommendations: they are entered by the participant, stored
+owner-scoped (`isCustom = true`, `ownerUserId`), and excluded from the
+recommendation pool and the catalogue list.
+
 ---
 
 # 21. Skill Gaps
@@ -765,6 +788,10 @@ AI can explain:
 * why the gap should be prioritized
 
 AI cannot arbitrarily mark a required skill as completed.
+
+When the target is a participant-named custom career, the backend lazily
+generates its requirement skills (once, idempotently) before the same
+comparison runs; the comparison itself remains backend-owned.
 
 ---
 
@@ -791,6 +818,11 @@ The backend must validate generated roadmap tasks.
 AI-generated roadmap content must reference valid HerNext skills and careers.
 
 Roadmap progress must be calculated by backend logic.
+
+A roadmap targets either a catalogue career or the participant's own custom
+career. In the latter case the requirement skills (and any custom skills they
+introduce) come from the participant-scoped requirements generated for that
+career; task skills must resolve against them.
 
 ---
 

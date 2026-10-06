@@ -482,6 +482,19 @@ Which strengths are relevant
 What gaps remain
 ```
 
+A participant-named custom career (see PRODUCT_SPEC §13) is a **target**, never a
+recommendation candidate. The recommendation pool always stays catalogue-only.
+
+For a custom career, once the participant has set it as their target, the
+backend may ask the AI once to derive its requirement skills from the
+participant's own profile/experience. The output is a structured skill list
+(`careerName`, `careerDescription`, 3–15 skills with `name`, `importance` and
+`reason`). It is idempotently persisted (`career_skills` rows, creating
+owner-scoped custom skills when a name is not in the catalogue) and the AI's
+`careerName` must match the participant's stored career or the result is
+rejected. The AI never writes these requirements into the shared career
+catalogue.
+
 ---
 
 # 16. Career Recommendation Input
@@ -553,6 +566,12 @@ performing reconciliation and creating operational reports."
 ```
 
 The AI must not change the underlying skill-gap status.
+
+When the target career is participant-named (custom), the backend generates and
+persists its requirement skills lazily and once before running the same
+comparison (`GET`/`POST skill-gaps` never call the AI again afterwards). A
+read-only `GET` on a custom career that has no requirements yet returns an empty
+skill list rather than inventing content.
 
 ---
 
@@ -900,6 +919,12 @@ Rate limit
 ```
 
 The backend must handle these gracefully.
+
+For participant-named custom careers, requirement generation shares the same
+failure handling: an unavailable provider must produce `AI_SERVICE_ERROR`
+(503) and leave no partial requirements in the database. Generation is
+transactional, so a failed attempt is simply retried on the next request, never
+duplicated.
 
 Example:
 

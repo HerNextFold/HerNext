@@ -57,9 +57,33 @@ export const roadmapOutputSchema = z.object({
   }),
 });
 
+/**
+ * Skill requirements for a participant's OWN custom target career
+ * (docs/AI_SPEC.md §15, PRODUCT_SPEC.md §13). Unlike the other AI outputs this
+ * is only ever produced for a career the participant named themselves; it is
+ * never part of the shared catalogue. Names are generic real-world skills that
+ * the backend resolves or stores as participant/custom skills, so the result
+ * drives the exact same skill-gap and roadmap machinery as a catalogue career.
+ */
+export const careerRequirementsOutputSchema = z.object({
+  careerName: z.string().min(1).max(200),
+  careerDescription: z.string().min(1).max(2000),
+  skills: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(120),
+        importance: z.enum(['REQUIRED', 'IMPORTANT', 'NICE_TO_HAVE']),
+        reason: z.string().min(1).max(1000),
+      }),
+    )
+    .min(3)
+    .max(15),
+});
+
 export type CareerImpactOutput = z.infer<typeof careerImpactOutputSchema>;
 export type TransferableSkillsOutput = z.infer<typeof transferableSkillsOutputSchema>;
 export type RoadmapOutput = z.infer<typeof roadmapOutputSchema>;
+export type CareerRequirementsOutput = z.infer<typeof careerRequirementsOutputSchema>;
 
 /* Request validation schemas (docs/API_CONTRACT.md §7). */
 export const aiExperienceIdParamsSchema = z.object({

@@ -365,6 +365,8 @@ export function registerAiModule(app: FastifyInstance, service: AiService): void
           schema: {
             tags: ['AI Career Intelligence'],
             summary: 'Get skill gaps for a career (deterministic, read-first)',
+            description:
+              'Deterministic comparison of the participant skills versus the career\'s required skills. Read-only: returns an empty skill list for a custom career until requirements have been generated. The participant may only analyse a career they own when it is custom or any approved catalogue career.',
             operationId: 'careersGetSkillGaps',
             security: bearerAuth,
             params: idParams('careerId', 'A valid career id'),
@@ -372,6 +374,7 @@ export function registerAiModule(app: FastifyInstance, service: AiService): void
               200: okResponse('Skill gaps', skillGapsResponseSchema),
               400: errResponse('Invalid career id'),
               401: errResponse('Unauthenticated'),
+              403: errResponse('The career belongs to another participant'),
               404: errResponse('Career not found'),
             },
           },
@@ -386,7 +389,8 @@ export function registerAiModule(app: FastifyInstance, service: AiService): void
           schema: {
             tags: ['AI Career Intelligence'],
             summary: 'Compute and persist skill gaps for a career',
-            description: 'Deterministic backend comparison of user skills versus career-required skills; no AI call.',
+            description:
+              'Deterministic backend comparison of user skills versus career-required skills. For a participant\'s own custom career, the career\'s AI-derived requirements are generated once on this first POST if they do not exist yet.',
             operationId: 'aiRunSkillGaps',
             security: bearerAuth,
             params: idParams('careerId', 'A valid career id'),
@@ -394,7 +398,10 @@ export function registerAiModule(app: FastifyInstance, service: AiService): void
               200: okResponse('Skill gaps', skillGapsResponseSchema),
               400: errResponse('Invalid career id'),
               401: errResponse('Unauthenticated'),
+              403: errResponse('The career belongs to another participant'),
               404: errResponse('Career not found'),
+              422: errResponse('The AI returned unreadable requirements'),
+              503: errResponse('AI intelligence is temporarily unavailable'),
             },
           },
         },
@@ -421,6 +428,7 @@ export function registerAiModule(app: FastifyInstance, service: AiService): void
               200: okResponse('Career roadmap', roadmapResponseSchema),
               400: errResponse('Invalid request data'),
               401: errResponse('Unauthenticated'),
+              403: errResponse('The career belongs to another participant'),
               404: errResponse('Career not found'),
               409: errResponse('The participant already has all skills for this career'),
               422: errResponse('The AI returned unreadable or ungrounded roadmap output'),
@@ -466,6 +474,7 @@ export function registerAiModule(app: FastifyInstance, service: AiService): void
               200: okResponse('Career roadmap', roadmapResponseSchema),
               400: errResponse('Invalid career id or query parameter'),
               401: errResponse('Unauthenticated'),
+              403: errResponse('The career belongs to another participant'),
               404: errResponse('Career not found'),
               409: errResponse('The participant already has all skills for this career'),
               422: errResponse('The AI returned unreadable or ungrounded roadmap output'),

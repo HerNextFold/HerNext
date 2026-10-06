@@ -357,13 +357,27 @@ Relevant Existing Skills
 Potential Skill Gaps
 ```
 
+Recommendations always come from the approved catalogue. A participant-named
+custom career is never a recommendation; it exists only as the participant's own
+target (see §13).
+
 ---
 
 # 13. Target Career
 
 The participant selects a target career from available recommendations or the approved career catalogue.
 
-Once selected:
+The participant may instead name their own target career (for example "Nurse to
+Health Data Analyst") when it is not in the catalogue. It is stored as a custom
+career owned by that participant only:
+
+* It never appears in `GET /catalogue/careers` or in any career recommendation.
+* Another participant can never read or use it (`OWNERSHIP_ERROR`, 403).
+* Its requirement skills are generated from the participant's own context and
+  stored once, on demand; skill gaps and the roadmap then work exactly as for a
+  catalogue career.
+
+Once selected (either way):
 
 ```text
 Target Career
@@ -970,6 +984,11 @@ Credit Analyst
 ```
 
 This catalogue can expand after the hackathon.
+
+Participant-named target careers are stored separately from this catalogue. They
+are saved as custom careers scoped to their owner (`isCustom = true` +
+`ownerUserId`) and are excluded from the catalogue list, recommendations, and
+every other participant's view.
 
 ---
 

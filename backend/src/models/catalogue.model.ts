@@ -1,5 +1,9 @@
 import { AppError } from '../common/errors/app-error.js';
 import { errorCodes } from '../common/errors/error-codes.js';
+import {
+  invalidCareerNameReason,
+  normalizeCareerName,
+} from '../common/utils/career-name.js';
 import { getPool, queryRow, queryText, type Db } from '../lib/db.js';
 import type { SkillImportance } from '../lib/scoring/career-match.js';
 
@@ -29,9 +33,15 @@ export interface CareerPathRow {
   level: string;
   /**
    * True when a participant named this career themselves (migration 010).
-   * Reserved for future use: no endpoint writes such a row yet.
+   * Custom careers are scoped to their owner, never returned as catalogue
+   * options and never ranked by the recommendation engine.
    */
   isCustom: boolean;
+  /**
+   * Null for an approved catalogue career. The owning participant for a
+   * custom career (migration 011); the row is deleted when the owner is.
+   */
+  ownerUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -235,4 +245,152 @@ export async function assertCareerExists(db: Db | undefined, careerPathId: strin
     throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Career not found', 404);
   }
   return career;
+}
+
+/**
+ * Verifies a career exists AND the participant may use it: any catalogue
+ * career (ownerUserId is null) is usable by everyone, while a participant's
+ * custom career is only usable by its owner. Throws 404 for missing rows and
+ * 403 for another participant's custom career (docs/SECURITY_SPEC.md §IDOR).
+ */
+export async function assertCareerAccessible(
+  db: Db | undefined,
+  careerPathId: string,
+  userId: string,
+): Promise<CareerPathRow> {
+  const career = await findCareerById(db, careerPathId);
+  if (career === null) {
+    throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Career not found', 404);
+  }
+  if (career.isCustom && career.ownerUserId !== userId) {
+    throw new AppError(
+      errorCodes.OWNERSHIP_ERROR,
+      'This career belongs to another participant and cannot be used.',
+      403,
+    );
+  }
+  return career;
+}
+
+/** Finds an approved catalogue career by name, case-insensitively (migration 011). */
+export async function findCatalogueCareerByName(
+  db: Db | undefined,
+  rawName: string,
+): Promise<CareerPathRow | null> {
+  const name = normalizeCareerName(rawName);
+  return queryRow<CareerPathRow>(
+    db ?? getPool(),
+    'SELECT * FROM "career_paths" WHERE lower("name") = lower($1) AND "ownerUserId" IS NULL LIMIT 1',
+    [name],
+  );
+}
+
+/** Finds a custom career owned by a specific participant, by name, case-insensitively. */
+export async function findCustomCareerByName(
+  db: Db | undefined,
+  rawName: string,
+  userId: string,
+): Promise<CareerPathRow | null> {
+  const name = normalizeCareerName(rawName);
+  return queryRow<CareerPathRow>(
+    db ?? getPool(),
+    'SELECT * FROM "career_paths" WHERE lower("name") = lower($1) AND "ownerUserId" = $2 LIMIT 1',
+    [name, userId],
+  );
+}
+
+export interface CustomCareerMetadata {
+  industry?: string | null;
+  description?: string | null;
+}
+
+/**
+ * Resolves a participant-typed target career name to a "career_paths" row.
+ *
+ * An approved catalogue career always wins, matched case-insensitively, so
+ * typing "Fintech Operations Associate" reuses the seeded career and keeps the
+ * shared catalogue single-source. A participant's own existing custom career
+ * is reused on repeat. Only a genuinely new name becomes a new custom career,
+ * scoped to the participant via "ownerUserId" (migration 011) so it is stored
+ * and resolved for them but never offered as a catalogue option, never ranked,
+ * and never usable by another participant.
+ *
+ * Concurrent submissions of the same new name by the same participant can
+ * collide on the partial unique index (lower(name), ownerUserId), so the
+ * insert is conflict-safe and falls back to re-reading the owner's own row.
+ */
+export async function findOrCreateCareerByName(
+  db: Db,
+  rawName: string,
+  userId: string,
+  metadata?: CustomCareerMetadata,
+): Promise<CareerPathRow> {
+  const reason = invalidCareerNameReason(rawName);
+  if (reason !== null) {
+    throw new AppError(errorCodes.VALIDATION_ERROR, reason, 400);
+  }
+  const name = normalizeCareerName(rawName);
+
+  const catalogue = await findCatalogueCareerByName(db, name);
+  if (catalogue !== null) {
+    return catalogue;
+  }
+  const own = await findCustomCareerByName(db, name, userId);
+  if (own !== null) {
+    return own;
+  }
+
+  const industry = metadata?.industry?.trim() || 'General';
+  const description =
+    metadata?.description?.trim() || `Career goal named by the participant: ${name}.`;
+  const created = await queryRow<CareerPathRow>(
+    db,
+    `INSERT INTO "career_paths" ("name", "industry", "description", "level", "isCustom", "ownerUserId")
+     VALUES ($1, $2, $3, 'Custom', true, $4)
+     ON CONFLICT DO NOTHING
+     RETURNING *`,
+    [name, industry, description, userId],
+  );
+  if (created !== null) {
+    return created;
+  }
+  const existing = await findCustomCareerByName(db, name, userId);
+  if (existing !== null) {
+    return existing;
+  }
+  throw new AppError(
+    errorCodes.INTERNAL_SERVER_ERROR,
+    'Could not save that career. Please try again.',
+    500,
+  );
+}
+
+/** Replaces the required-skills mapping for a career with new rows. */
+export async function replaceCareerSkills(
+  db: Db,
+  careerPathId: string,
+  items: Array<{ skillId: string; importance: SkillImportance }>,
+): Promise<void> {
+  await queryText(db, 'DELETE FROM "career_skills" WHERE "careerPathId" = $1', [careerPathId]);
+  for (const item of items) {
+    await queryText(
+      db,
+      `INSERT INTO "career_skills" ("careerPathId", "skillId", "importance")
+       VALUES ($1, $2, $3::skill_importance)`,
+      [careerPathId, item.skillId, item.importance],
+    );
+  }
+}
+
+/** Updates the human-readable description of a career row. */
+export async function updateCareerDescription(
+  db: Db,
+  careerPathId: string,
+  description: string,
+): Promise<void> {
+  await queryText(
+    db,
+    'UPDATE "career_paths" SET "description" = $1, "updatedAt" = now() WHERE "id" = $2',
+    [description, careerPathId],
+  );
 }

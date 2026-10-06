@@ -8,8 +8,9 @@ import {
   type CareerProfileRow,
 } from "../../models/career-profile.model.js";
 import {
-  assertCareerExists,
+  assertCareerAccessible,
   findCareerById,
+  findOrCreateCareerByName,
   findOrCreateSkillByName,
   findSkillsByIds,
 } from "../../models/catalogue.model.js";
@@ -91,9 +92,11 @@ export class ProfileService {
         }
       }
 
-      if (input.targetCareerId !== null && input.targetCareerId !== undefined) {
-        await assertCareerExists(client, input.targetCareerId);
-      }
+      const targetCareerId = await this.resolveTargetCareerId(client, userId, {
+        targetCareerId: input.targetCareerId,
+        targetCareerName: input.targetCareerName,
+        industry: input.industry,
+      });
 
       const saved = await upsertCareerProfile(client, {
         participantProfileId: participantProfile.id,
@@ -103,7 +106,7 @@ export class ProfileService {
         education: input.education ?? null,
         employmentType: input.employmentType,
         careerInterests: input.careerInterests ?? null,
-        targetCareerId: input.targetCareerId ?? null,
+        targetCareerId: targetCareerId,
       });
 
       if (input.skillIds !== undefined && input.skillIds.length > 0) {
@@ -181,10 +184,15 @@ export class ProfileService {
         }
       }
 
-      // Validate the catalogue references BEFORE writing anything, so an
-      // unknown career or skill aborts the transaction instead of persisting
-      // a partial submission.
-      await assertCareerExists(client, input.targetCareerId);
+      // Validate the target career BEFORE writing anything, so an unknown
+      // career or skill aborts the transaction instead of persisting a partial
+      // submission. A participant-named career is created here, still inside
+      // the transaction, so a failed submission leaves no orphan custom row.
+      const targetCareerId = await this.resolveTargetCareerId(client, userId, {
+        targetCareerId: input.targetCareerId,
+        targetCareerName: input.targetCareerName,
+        industry: input.industry,
+      });
 
       if (input.skillIds.length > 0) {
         await this.saveSelfReportedSkills(client, userId, input.skillIds);
@@ -200,7 +208,7 @@ export class ProfileService {
         education: input.education ?? null,
         employmentType: input.employmentType,
         careerInterests: input.careerInterests ?? null,
-        targetCareerId: input.targetCareerId,
+        targetCareerId: targetCareerId,
         markOnboardingCompleted: true,
       });
 
@@ -247,6 +255,38 @@ export class ProfileService {
       completed: completedAt !== null,
       completedAt: completedAt === null ? null : completedAt.toISOString(),
     };
+  }
+
+  /**
+   * Resolves the target career to a stored "career_paths" row id.
+   *
+   * An approved catalogue id is validated and ownership-checked: a participant
+   * may only target a catalogue career or their OWN custom career, never
+   * another participant's. A participant-named career (targetCareerName) is
+   * matched against the catalogue first, then the participant's own custom
+   * careers, and only a genuinely new name is stored as a new participant-
+   * scoped custom career. When neither is supplied, the target is cleared.
+   */
+  private async resolveTargetCareerId(
+    db: Db,
+    userId: string,
+    input: {
+      targetCareerId: string | null | undefined;
+      targetCareerName: string | null | undefined;
+      industry: string;
+    },
+  ): Promise<string | null> {
+    if (input.targetCareerId != null) {
+      const career = await assertCareerAccessible(db, input.targetCareerId, userId);
+      return career.id;
+    }
+    if (input.targetCareerName != null) {
+      const career = await findOrCreateCareerByName(db, input.targetCareerName, userId, {
+        industry: input.industry,
+      });
+      return career.id;
+    }
+    return null;
   }
 
   private async saveSelfReportedSkills(

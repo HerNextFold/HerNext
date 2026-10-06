@@ -52,6 +52,10 @@ const careerProfileViewSchema = {
         name: { type: 'string' },
         industry: { type: 'string' },
         level: { type: 'string' },
+        isCustom: {
+          type: 'boolean',
+          description: 'True when the participant named this career themselves; such a career is scoped to them and never appears in the shared catalogue.',
+        },
       },
     },
     existingSkills: {
@@ -91,7 +95,15 @@ const upsertProfileBodySchema = {
     targetCareerId: {
       type: ['string', 'null'],
       format: 'uuid',
-      description: 'Approved HerNext career catalogue id',
+      description:
+        'Approved HerNext career catalogue id, OR the id of the participant\'s own custom career. Mutually exclusive with targetCareerName.',
+    },
+    targetCareerName: {
+      type: ['string', 'null'],
+      minLength: 1,
+      maxLength: 120,
+      description:
+        'A career the participant names themselves, used when targetCareerId is omitted. Matched against the catalogue first; otherwise stored as a participant-scoped custom career. Both fields cannot be set together.',
     },
     skillIds: {
       type: ['array'],
@@ -134,7 +146,6 @@ const completeOnboardingBodySchema = {
     'industry',
     'yearsOfExperience',
     'employmentType',
-    'targetCareerId',
   ],
   additionalProperties: false,
   properties: {
@@ -150,7 +161,19 @@ const completeOnboardingBodySchema = {
     },
     country: { type: 'string', minLength: 1, maxLength: 100 },
     state: { type: ['string', 'null'], maxLength: 100 },
-    targetCareerId: { type: 'string', format: 'uuid' },
+    targetCareerId: {
+      type: 'string',
+      format: 'uuid',
+      description:
+        'Approved HerNext career catalogue id. Exactly one of targetCareerId / targetCareerName is required.',
+    },
+    targetCareerName: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 120,
+      description:
+        'A career the participant names themselves, used instead of targetCareerId. Stored as a participant-scoped custom career. Exactly one of the two is required.',
+    },
     skillIds: { type: ['array'], maxItems: 50, items: uuidSchema() },
     experience: {
       type: ['object', 'null'],
@@ -222,6 +245,7 @@ export function registerProfileModule(app: FastifyInstance, service: ProfileServ
             response: {
               200: okResponse('Career profile saved', careerProfileViewSchema),
               400: errResponse('Invalid request data'),
+              403: errResponse('The target career belongs to another participant'),
               404: errResponse('Career or skill not found'),
             },
           },
@@ -266,6 +290,7 @@ export function registerProfileModule(app: FastifyInstance, service: ProfileServ
               200: okResponse('Onboarding completed', careerProfileViewSchema),
               400: errResponse('Invalid request data'),
               401: errResponse('Unauthenticated'),
+              403: errResponse('The target career belongs to another participant'),
               404: errResponse('Target career or participant profile not found'),
             },
           },

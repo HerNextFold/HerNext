@@ -1,5 +1,7 @@
+import type { PoolClient } from 'pg';
 import { AppError } from '../../common/errors/app-error.js';
 import { errorCodes } from '../../common/errors/error-codes.js';
+import { normalizeCareerName } from '../../common/utils/career-name.js';
 import { getPool, withTransaction, type Db } from '../../lib/db.js';
 import { calculateAiImpactScore, impactLevelForScore } from '../../lib/scoring/ai-impact.js';
 import {
@@ -8,15 +10,21 @@ import {
   calculateCareerMatchScore,
   calculateAiReadinessScore,
   calculateCareerInterestScore,
+  SKILL_IMPORTANCE_WEIGHTS,
+  type SkillImportance,
 } from '../../lib/scoring/career-match.js';
 import { computeSkillGaps, missingSkills, type GapPriority, type SkillGapStatus } from '../../lib/scoring/skill-gap.js';
 import { findOwnedExperience, listExperiences } from '../../models/experience.model.js';
 import { findCareerProfileByUserId } from '../../models/career-profile.model.js';
 import {
-  assertCareerExists,
+  assertCareerAccessible,
   findCareerWithSkills,
+  findOrCreateSkillByName,
   listCareers,
   listSkills,
+  replaceCareerSkills,
+  updateCareerDescription,
+  type CareerPathRow,
 } from '../../models/catalogue.model.js';
 import {
   insertCareerAnalysis,
@@ -45,19 +53,35 @@ import {
 } from '../../models/roadmap.model.js';
 import { LLMProviderError, type LLMProvider } from './providers/llm.provider.js';
 import { buildCareerImpactPrompt } from './prompts/career-impact.prompt.js';
+import { buildCareerRequirementsPrompt } from './prompts/career-requirements.prompt.js';
 import { buildTransferableSkillsPrompt } from './prompts/transferable-skills.prompt.js';
 import { buildRoadmapPrompt } from './prompts/roadmap.prompt.js';
 import {
   careerImpactOutputSchema,
+  careerRequirementsOutputSchema,
   transferableSkillsOutputSchema,
   roadmapOutputSchema,
   type CareerImpactOutput,
+  type CareerRequirementsOutput,
   type TransferableSkillsOutput,
   type RoadmapOutput,
 } from './ai.schemas.js';
 import { connectProfileWithExperience } from './ai.util.js';
 
 const MAX_AI_RETRIES = 1;
+
+/** A career together with its resolved requirements, as findCareerWithSkills returns. */
+type CareerWithItsSkills = {
+  career: CareerPathRow;
+  skills: Array<{ skillId: string; skillName: string; importance: SkillImportance }>;
+};
+
+/**
+ * Minimum usable skills an AI response must provide for a custom career after
+ * de-duplication. Mirrors the schema's min(3); a runtime check is still needed
+ * because de-duplication can reduce the resolved set below the raw count.
+ */
+const MIN_REQUIREMENT_SKILLS = 3;
 
 export interface CareerImpactResponse {
   id: string;
@@ -454,6 +478,10 @@ export class AiService {
   }
 
   async runSkillGaps(userId: string, careerPathId: string, db?: Db): Promise<SkillGapsResponse> {
+    // Write path: a custom career that has no AI-derived requirements yet gets
+    // them generated once, so the gaps are computed from real requirements
+    // rather than reported as an empty list. The GET path stays read-only.
+    await this.ensureCareerSkills(userId, careerPathId);
     const view = await this.buildSkillGapsView(userId, careerPathId, db);
     if (view === null) {
       throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Career not found', 404);
@@ -486,7 +514,9 @@ export class AiService {
     db?: Db,
   ): Promise<SkillGapsResponse | null> {
     const pool = db ?? getPool();
-    await assertCareerExists(pool, careerPathId);
+    // Ownership gate: a participant may only analyse a career they own (when
+    // custom) or any approved catalogue career.
+    await assertCareerAccessible(pool, careerPathId, userId);
     const withSkills = await findCareerWithSkills(pool, careerPathId);
     if (withSkills === null) {
       return null;
@@ -510,16 +540,161 @@ export class AiService {
   }
 
   /**
+   * Ensures a career has the skill requirements its write-path operations
+   * depend on. Approved catalogue careers already carry seeded requirements;
+   * a participant's own custom career has none until the AI derives them once
+   * (lazily, on the first skill-gap POST or roadmap generation). Returns the
+   * career with its resolved requirements and enforces ownership.
+   */
+  private async ensureCareerSkills(userId: string, careerPathId: string): Promise<CareerWithItsSkills> {
+    const career = await assertCareerAccessible(getPool(), careerPathId, userId);
+    if (!career.isCustom) {
+      const existing = await findCareerWithSkills(getPool(), careerPathId);
+      if (existing === null) {
+        throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Career not found', 404);
+      }
+      return existing;
+    }
+    return this.generateCareerRequirements(userId, careerPathId);
+  }
+
+  /**
+   * Generates (once) the AI-derived skill requirements for a participant's own
+   * custom target career (docs/AI_SPEC.md §15, PRODUCT_SPEC.md §13).
+   *
+   * Idempotent: when the career already has requirements the existing set is
+   * returned and the AI is not called again, so repeated skill-gap or roadmap
+   * calls never burn the rate-limited provider. Only a career the participant
+   * named themselves can be processed; catalogue careers always have seeded
+   * requirements and anything AI could add would pollute the shared catalogue.
+   */
+  async generateCareerRequirements(userId: string, careerPathId: string): Promise<CareerWithItsSkills> {
+    const career = await assertCareerAccessible(getPool(), careerPathId, userId);
+    if (!career.isCustom) {
+      throw new AppError(
+        errorCodes.VALIDATION_ERROR,
+        'Only a participant-named career can have AI-derived requirements.',
+        400,
+      );
+    }
+
+    return withTransaction(async (client) => {
+      const persisted = await findCareerWithSkills(client, careerPathId);
+      if (persisted !== null && persisted.skills.length > 0) {
+        return persisted;
+      }
+      return this.generateAndStoreRequirements(client, career, userId);
+    });
+  }
+
+  /**
+   * Calls the AI for a custom career's requirements and persists them inside
+   * the caller's transaction. Runs only when no requirements exist yet, so the
+   * rate-limited provider is used at most once per career.
+   */
+  private async generateAndStoreRequirements(
+    client: PoolClient,
+    career: CareerPathRow,
+    userId: string,
+  ): Promise<CareerWithItsSkills> {
+    const profile = await findCareerProfileByUserId(client, userId);
+    const userSkills = await listUserSkillsWithNames(client, userId);
+
+    let parsed: CareerRequirementsOutput;
+    try {
+      const { system, user } = buildCareerRequirementsPrompt({
+        careerName: career.name,
+        currentOccupation: profile?.currentOccupation ?? '',
+        industry: profile?.industry ?? '',
+        skillsKnown: userSkills.map((s) => s.skillName),
+      });
+      const raw = await this.callWithRetry({ system, user });
+      parsed = careerRequirementsOutputSchema.parse(raw);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      if (error instanceof LLMProviderError) throw aiFailure(error);
+      throw new AppError(errorCodes.AI_OUTPUT_INVALID, 'The AI returned an unreadable response. Please try again.', 422);
+    }
+
+    // The AI must name the participant's actual career, not a look-alike.
+    if (parsed.careerName.trim().toLowerCase() !== career.name.trim().toLowerCase()) {
+      throw new AppError(
+        errorCodes.AI_OUTPUT_INVALID,
+        'The AI did not target the requested career.',
+        422,
+      );
+    }
+
+    const resolved = await this.resolveRequirementSkills(client, parsed.skills);
+    if (resolved.length < MIN_REQUIREMENT_SKILLS) {
+      throw new AppError(
+        errorCodes.AI_OUTPUT_INVALID,
+        `The AI returned fewer than ${MIN_REQUIREMENT_SKILLS} usable skills for this career.`,
+        422,
+      );
+    }
+
+    await replaceCareerSkills(client, career.id, resolved);
+    const description = parsed.careerDescription.trim();
+    if (description.length > 0 && description !== career.description) {
+      await updateCareerDescription(client, career.id, description);
+    }
+
+    const withSkills = await findCareerWithSkills(client, career.id);
+    if (withSkills === null) {
+      throw new AppError(
+        errorCodes.INTERNAL_SERVER_ERROR,
+        'Could not save the career requirements. Please try again.',
+        500,
+      );
+    }
+    return withSkills;
+  }
+
+  /**
+   * Resolves AI-named requirement skills to "skills" rows, reusing the same
+   * rule as participant-typed skills: an approved catalogue skill that matches
+   * case-insensitively wins, and only a genuinely new name is stored as a
+   * custom skill. Entries are de-duplicated by lowercase name, keeping the
+   * highest-importance variant so a duplicate cannot skew weights.
+   */
+  private async resolveRequirementSkills(
+    db: Db,
+    items: Array<{ name: string; importance: SkillImportance }>,
+  ): Promise<Array<{ skillId: string; importance: SkillImportance }>> {
+    const bestByName = new Map<string, { name: string; importance: SkillImportance }>();
+    for (const item of items) {
+      const normalized = normalizeCareerName(item.name);
+      if (normalized.length === 0) {
+        continue;
+      }
+      const key = normalized.toLowerCase();
+      const current = bestByName.get(key);
+      if (
+        current === undefined ||
+        SKILL_IMPORTANCE_WEIGHTS[item.importance] > SKILL_IMPORTANCE_WEIGHTS[current.importance]
+      ) {
+        bestByName.set(key, { name: normalized, importance: item.importance });
+      }
+    }
+    const resolved: Array<{ skillId: string; importance: SkillImportance }> = [];
+    for (const item of bestByName.values()) {
+      const skill = await findOrCreateSkillByName(db, item.name);
+      resolved.push({ skillId: skill.id, importance: item.importance });
+    }
+    return resolved;
+  }
+
+  /**
    * Generates (or reuses) a 30/60/90-day roadmap (docs/API_CONTRACT.md §19).
    * When a current roadmap already exists for the same career it is reused so
    * the rate-limited AI is not called again; an explicit regenerate (or a
    * different target career) replaces it in place, preserving the roadmap row.
    */
   async runRoadmap(userId: string, careerPathId: string, regenerate = false): Promise<RoadmapResponse> {
-    const withSkills = await findCareerWithSkills(getPool(), careerPathId);
-    if (withSkills === null) {
-      throw new AppError(errorCodes.RESOURCE_NOT_FOUND, 'Career not found', 404);
-    }
+    // Ownership gate plus, for custom careers, one-time generation of the
+    // AI-derived requirements the roadmap depends on.
+    const withSkills = await this.ensureCareerSkills(userId, careerPathId);
     const userSkills = await listUserSkillsWithNames(getPool(), userId);
     const userSkillIds = new Set(userSkills.map((s) => s.skillId));
 
@@ -545,8 +720,11 @@ export class AiService {
     }
 
     const profile = await findCareerProfileByUserId(getPool(), userId);
-    const skills = await listSkills(getPool());
-    const idByName = new Map(skills.map((s) => [s.name.toLowerCase(), s.id]));
+    // Every task must resolve to one of the career's actual skills. For a
+    // participant's custom career those include user/custom skills, so the map
+    // is built from the resolved career requirements rather than the approved
+    // catalogue filter (listSkills), which would reject custom skills.
+    const idByName = new Map(withSkills.skills.map((s) => [s.skillName.toLowerCase(), s.skillId]));
 
     let parsed: RoadmapOutput;
     try {
