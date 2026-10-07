@@ -5,9 +5,9 @@ import { Link } from 'react-router-dom'
 import Button from './Button'
 
 const NAV_LINKS = [
-  { label: 'How It Works', href: '#how-it-works' },
-  { label: 'For Organizations', href: '#organizations' },
-  { label: 'About', href: '#about' },
+  { label: 'Home', to: '/' },
+  { label: 'For Organizations', to: '/organizations' },
+  { label: 'About', to: '/about' },
 ]
 
 export default function Navbar() {
@@ -27,12 +27,12 @@ export default function Navbar() {
         <ul className="hidden items-center gap-8 md:flex">
           {NAV_LINKS.map((link) => (
             <li key={link.label}>
-              <a
-                href={link.href}
+              <Link
+                to={link.to}
                 className="text-sm text-body transition-colors hover:text-ink"
               >
                 {link.label}
-              </a>
+              </Link>
             </li>
           ))}
         </ul>
@@ -74,13 +74,13 @@ export default function Navbar() {
             <ul className="flex flex-col gap-1 px-6 py-4">
               {NAV_LINKS.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.href}
+                  <Link
+                    to={link.to}
                     onClick={() => setOpen(false)}
                     className="block py-2 text-sm text-body"
                   >
                     {link.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
               <li className="mt-2 flex flex-col gap-3 border-t border-hairline pt-4">

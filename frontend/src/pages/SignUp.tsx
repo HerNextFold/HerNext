@@ -44,6 +44,11 @@ export default function SignUp() {
       return;
     }
 
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -201,6 +206,9 @@ export default function SignUp() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+            <p className="mt-1.5 text-xs text-body">
+              Password must be at least 8 characters.
+            </p>
           </div>
 
           <div>
