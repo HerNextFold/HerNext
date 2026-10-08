@@ -1,5 +1,7 @@
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
+import AboutPage from "./pages/AboutPage";
+import OrganizationsPage from "./pages/OrganizationsPage";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -36,6 +38,8 @@ function App() {
         <Routes>
           {/* Public & Landing Pages */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/organizations" element={<OrganizationsPage />} />
 
           {/* Authentication Flow */}
           <Route path="/sign-in" element={<SignIn />} />
