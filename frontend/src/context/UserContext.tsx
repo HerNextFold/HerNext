@@ -193,6 +193,13 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setCareerProfile(null);
     try {
       localStorage.removeItem(USER_SESSION_KEY);
+      // Clear any saved onboarding drafts so they do not survive a session/account boundary.
+      for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+        const key = localStorage.key(i)
+        if (key?.startsWith('hernext_onboarding_draft:')) {
+          localStorage.removeItem(key)
+        }
+      }
     } catch (e) {
       console.warn('Failed to clear user session from localStorage', e);
     }

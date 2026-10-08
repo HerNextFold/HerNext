@@ -1170,6 +1170,108 @@ Updates a roadmap task.
 
 ---
 
+# 21a. GET `/learning/resources`
+
+Discovers grounded learning resources for a skill. Dynamic discovery is **lazy**:
+it runs only when called (never during roadmap generation). Responses are cached
+in-process for 24 hours and served from cache without any AI or external call.
+
+### Authentication
+
+Bearer token required. Learning resources are not user-scoped: the response is
+identical for any authenticated participant, but the AI prompt is lightly
+grounded with the caller's own roadmap/gap context for that skill when present.
+
+### Query Parameters
+
+```text
+skill      required, 1–120 characters after trim         "Excel"
+types      optional CSV of video / article / course      "video,course"
+refresh    optional boolean, forces a fresh discovery    "true"
+```
+
+### Processing
+
+```text
+Authorized request
+  ↓
+Normalize + validate skill (400 when missing/whitespace/>120)
+  ↓
+Fresh cache hit? → return (no AI, no provider)
+  ↓
+Provider not configured (no YOUTUBE_API_KEY) → 503 LEARNING_SERVICE_UNAVAILABLE
+  ↓
+AI returns skill + intent + search queries + preferred types (never URLs)
+  ↓
+Provider search (YouTube), deterministic HTTPS/validation + ranking
+  ↓
+Final Zod validation → cache successful results → response
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "skill": { "name": "Excel", "isCustom": false },
+    "source": "discovered",
+    "freshness": "fresh",
+    "resources": [
+      {
+        "dedupeKey": "video:v123",
+        "type": "video",
+        "provider": "youtube",
+        "title": "Excel Pivot Tables for Beginners",
+        "creator": { "name": "Channel", "url": "https://www.youtube.com/@..." },
+        "sourceUrl": "https://www.youtube.com/watch?v=v123",
+        "videoId": "v123",
+        "embedUrl": "https://www.youtube.com/embed/v123",
+        "thumbnail": "https://i.ytimg.com/vi/v123/hqdefault.jpg",
+        "durationMinutes": 18,
+        "summary": "Learn Excel formulas, pivot tables and data analysis workflows.",
+        "level": "BEGINNER",
+        "isCurated": false,
+        "discoveredAt": "2026-09-06T...",
+        "publishedAt": "2025-01-12T..."
+      }
+    ]
+  }
+}
+```
+
+### Semantics
+
+* `source` is `discovered` only when ≥1 resource was returned; an honest
+  `empty` source is returned (never cached) when nothing surfaced.
+* `freshness` is `fresh` for live/cached discoveries and `stale` only when a
+  previously cached discovery is served because a refresh attempt failed —
+  stale data is never fabricated and no partial results are returned.
+* `skill.isCustom` is `true` for user-created custom skills (discovery keys by
+  normalized name, so custom skills work identically without assuming
+  catalogue membership).
+* `refresh=true` bypasses the fresh-cache read but still serves stale data if
+  the refresh attempt fails.
+* Ranking is deterministic (skill-token match, preferred-type preference,
+  recency and duration sweet-spot) and capped at `MAX_RESULTS` (8).
+* Every external URL is HTTPS (`sourceUrl`, `embedUrl`, `thumbnail`); thumbnails
+  are restricted to YouTube's image hosts.
+
+### Errors
+
+| Status | Code                          | Meaning                                       |
+| ------ | ----------------------------- | --------------------------------------------- |
+| 400    | `VALIDATION_ERROR`            | missing/oversized skill, unsupported type     |
+| 401    | `AUTHENTICATION_REQUIRED`     | no/invalid bearer token                       |
+| 422    | `AI_OUTPUT_INVALID`           | AI targeted a different skill (ungrounded)    |
+| 429    | `RATE_LIMIT_EXCEEDED`         | burst limit (20 / 60s per IP)                 |
+| 503    | `LEARNING_SERVICE_UNAVAILABLE`| provider/AI down or `YOUTUBE_API_KEY` unset   |
+
+A `200` response can therefore also mean "empty result or stale cache", never
+fabricated content.
+
+---
+
 # 22. Progress
 
 ## GET `/progress`
@@ -1872,6 +1974,7 @@ ORGANIZATION_ACCESS_DENIED
 PROGRAM_ACCESS_DENIED
 AI_SERVICE_ERROR
 AI_OUTPUT_INVALID
+LEARNING_SERVICE_UNAVAILABLE
 DATABASE_ERROR
 RATE_LIMIT_EXCEEDED
 INTERNAL_SERVER_ERROR
@@ -1882,6 +1985,9 @@ INTERNAL_SERVER_ERROR
 * `INVALID_OTP` (`400`): a verification/reset code is missing, wrong, expired,
   used, or exhausted. The response is identical on every failure so the endpoint
   cannot be used to enumerate valid codes.
+* `LEARNING_SERVICE_UNAVAILABLE` (`503`): dynamic learning-resource discovery is
+  not configured (`YOUTUBE_API_KEY` unset) or the AI/provider is temporarily
+  down; served only when no stale cached discovery exists.
 
 ---
 
@@ -2059,6 +2165,7 @@ src/modules/
 ├── evidence/
 ├── achievements/
 ├── passport/
+├── learning/
 ├── organizations/
 └── analytics/
 ```

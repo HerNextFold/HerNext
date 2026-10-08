@@ -56,15 +56,18 @@ import { buildCareerImpactPrompt } from './prompts/career-impact.prompt.js';
 import { buildCareerRequirementsPrompt } from './prompts/career-requirements.prompt.js';
 import { buildTransferableSkillsPrompt } from './prompts/transferable-skills.prompt.js';
 import { buildRoadmapPrompt } from './prompts/roadmap.prompt.js';
+import { buildLearningSearchIntentPrompt } from './prompts/learning-search-intent.prompt.js';
 import {
   careerImpactOutputSchema,
   careerRequirementsOutputSchema,
   transferableSkillsOutputSchema,
   roadmapOutputSchema,
+  learningSearchIntentOutputSchema,
   type CareerImpactOutput,
   type CareerRequirementsOutput,
   type TransferableSkillsOutput,
   type RoadmapOutput,
+  type LearningSearchIntentOutput,
 } from './ai.schemas.js';
 import { connectProfileWithExperience } from './ai.util.js';
 
@@ -798,6 +801,41 @@ export class AiService {
     return toTransferableSkillResponse(stored, byId);
   }
 
+  /**
+   * Translates a skill into a structured learning-resource search intent
+   * (docs/AI_SPEC.md §15a, docs/API_CONTRACT.md §24). The AI returns only the
+   * intent/queries/preferred types - never URLs - so every resource is later
+   * produced by an external discovery provider. Reuses the same
+   * callWithRetry / aiFailure / Zod validation path as every other AI output.
+   */
+  async generateLearningSearchIntent(input: {
+    skillName: string;
+    taskTitle?: string;
+    taskDescription?: string;
+    gapStatus?: SkillGapStatus;
+    gapPriority?: GapPriority;
+  }): Promise<LearningSearchIntentOutput> {
+    let output: LearningSearchIntentOutput;
+    try {
+      const { system, user } = buildLearningSearchIntentPrompt(input);
+      const raw = await this.callWithRetry({ system, user });
+      output = learningSearchIntentOutputSchema.parse(raw);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      if (error instanceof LLMProviderError) throw aiFailure(error);
+      throw new AppError(errorCodes.AI_OUTPUT_INVALID, 'The AI returned an unreadable response. Please try again.', 422);
+    }
+    // The AI must be targeting the requested skill, not a look-alike.
+    if (output.skill.trim().toLowerCase() !== input.skillName.trim().toLowerCase()) {
+      throw new AppError(
+        errorCodes.AI_OUTPUT_INVALID,
+        'The AI did not target the requested skill.',
+        422,
+      );
+    }
+    return output;
+  }
+
   private async callWithRetry(input: { system: string; user: string }): Promise<unknown> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= MAX_AI_RETRIES; attempt++) {
@@ -895,6 +933,7 @@ function buildRoadmapResponse(
     title: t.title,
     description: t.description,
     skillId: t.skillId,
+    skillName: t.skillName,
     estimatedMinutes: t.estimatedMinutes,
     order: t.order,
     status: t.status,

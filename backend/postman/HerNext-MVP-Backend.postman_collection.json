@@ -2,7 +2,7 @@
   "info": {
     "name": "HerNext MVP Backend (Pre-Deployment QA)",
     "_postman_id": "5f5e5a91-0001-4f4c-aa66-hernextqa01",
-    "description": "Executable QA suite for the HerNext (Team FiveFold) backend, generated from the verified route inventory and docs/API_CONTRACT.md. Two execution modes: (A) Fast regression via seeded demo accounts (no OTP) - run folders 00, 02, then 05-13; (B) Deep fresh-account gate (manual OTP) - run folder 01 to register+verify a brand-new account, then 03, 05-13. Replace {{testEmailDomain}} with a mailbox you can actually read. See docs/POSTMAN_TESTING.md.",
+    "description": "Executable QA suite for the HerNext (Team FiveFold) backend, generated from the verified route inventory and docs/API_CONTRACT.md. Two execution modes: (A) Fast regression via seeded demo accounts (no OTP) - run folders 00, 02, then 05-13; (B) Deep fresh-account gate (manual OTP) - run folder 01 to register+verify a brand-new account, then 03, 05-13. Folder 15 adds learning-resource discovery probes (YouTube-backed; with a configured YOUTUBE_API_KEY they run full 200 assertions, otherwise they degrade to safe-503 checks). Replace {{testEmailDomain}} with a mailbox you can actually read. See docs/POSTMAN_TESTING.md.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -1789,6 +1789,9 @@
                   "  pm.environment.set('roadmapId', b.data.roadmap.id);",
                   "  if (b.data.phases.DAY_30.length > 0) {",
                   "    pm.environment.set('roadmapTaskId', b.data.phases.DAY_30[0].id);",
+                  "    const t = b.data.phases.DAY_30[0];",
+                  "    pm.expect(t).to.have.property('skillName');",
+                  "    pm.expect(t.skillName === null || typeof t.skillName === 'string').to.eql(true);",
                   "  }",
                   "});"
                 ]
@@ -3494,7 +3497,289 @@
       ]
     },
     {
-      "name": "15 - Rate Limiting (opt-in, use LAST)",
+      "name": "15 - Learning Resources (dynamic discovery)",
+      "description": "Verifies GET /api/v1/learning/resources (docs/API_CONTRACT.md §21a): grounded discovery via AI search-intent + YouTube provider, 24h in-process cache, deterministic ranking, and safe 503 when discovery is unconfigured. Discovery probes tolerate 503 (asserting LEARNING_SERVICE_UNAVAILABLE) so the folder runs with or without YOUTUBE_API_KEY; the 400/401 probes always assert. Requires the PARTICPANT token from folder 02.",
+      "item": [
+        {
+          "name": "GET /learning/resources?skill=Excel (discover or safe 503)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('discovery returns a grounded envelope or safe 503', function () {",
+                  "  if (pm.response.code === 503) {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('LEARNING_SERVICE_UNAVAILABLE');",
+                  "    pm.environment.set('learningOk', 'false');",
+                  "    return;",
+                  "  }",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.environment.set('learningOk', 'true');",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(d.skill.name).to.eql('Excel');",
+                  "  pm.expect(['discovered', 'empty']).to.include(d.source);",
+                  "  pm.expect(['fresh', 'stale']).to.include(d.freshness);",
+                  "  pm.expect(d.resources).to.be.an('array');",
+                  "  if (d.resources.length > 0) {",
+                  "    pm.expect(d.source).to.eql('discovered');",
+                  "    const r = d.resources[0];",
+                  "    pm.expect(r.title).to.be.a('string');",
+                  "    pm.expect(r.sourceUrl).to.be.a('string');",
+                  "    pm.expect(r.sourceUrl.startsWith('https://')).to.eql(true);",
+                  "    pm.expect(['video', 'article', 'course']).to.include(r.type);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/learning/resources?skill=Excel",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "learning", "resources"],
+              "query": [{ "key": "skill", "value": "Excel" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /learning/resources?skill=Excel (fresh cache hit)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('second read serves fresh cached discovery', function () {",
+                  "  if (pm.environment.get('learningOk') === 'false') {",
+                  "    pm.expect(pm.response.code).to.eql(503);",
+                  "    return;",
+                  "  }",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.freshness).to.eql('fresh');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/learning/resources?skill=Excel",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "learning", "resources"],
+              "query": [{ "key": "skill", "value": "Excel" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /learning/resources?skill=Excel&refresh=true (bypass cache)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('refresh=true bypasses the fresh cache', function () {",
+                  "  if (pm.environment.get('learningOk') === 'false') {",
+                  "    pm.expect(pm.response.code).to.eql(503);",
+                  "    return;",
+                  "  }",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.freshness).to.eql('fresh');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/learning/resources?skill=Excel&refresh=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "learning", "resources"],
+              "query": [
+                { "key": "skill", "value": "Excel" },
+                { "key": "refresh", "value": "true" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /learning/resources?skill=Excel&types=video,course (accepted)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('supported types param is accepted', function () {",
+                  "  if (pm.response.code === 503) {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('LEARNING_SERVICE_UNAVAILABLE');",
+                  "    return;",
+                  "  }",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.resources).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/learning/resources?skill=Excel&types=video,course",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "learning", "resources"],
+              "query": [
+                { "key": "skill", "value": "Excel" },
+                { "key": "types", "value": "video,course" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /learning/resources (missing skill 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('missing skill is rejected', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/learning/resources",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "learning", "resources"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /learning/resources?skill=<130 chars> (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('oversized skill is rejected', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/learning/resources?skill=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "learning", "resources"],
+              "query": [{ "key": "skill", "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /learning/resources?skill=Excel&types=podcast (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('unsupported type is rejected', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/learning/resources?skill=Excel&types=podcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "learning", "resources"],
+              "query": [
+                { "key": "skill", "value": "Excel" },
+                { "key": "types", "value": "podcast" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /learning/resources?skill=Excel (401 without token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('missing bearer token is rejected', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('AUTHENTICATION_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/learning/resources?skill=Excel",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "learning", "resources"],
+              "query": [{ "key": "skill", "value": "Excel" }]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "16 - Rate Limiting (opt-in, use LAST)",
       "description": "Opt-in probes that intentionally trip rate limits. Run the whole collection first, then run only this folder. WARNING: GET /ai/roadmap will be throttle-limited for ~60s for the caller IP, and the register probe burns 21 register permits for ~15min. These are destructive to parallel runs - run last and alone.",
       "item": [
         {

@@ -161,13 +161,14 @@ const skillGapsResponseSchema = {
 
 const roadmapTaskSchema = {
   type: 'object',
-  required: ['id', 'title', 'description', 'skillId', 'estimatedMinutes', 'order', 'status', 'completedAt'],
+  required: ['id', 'title', 'description', 'skillId', 'skillName', 'estimatedMinutes', 'order', 'status', 'completedAt'],
   additionalProperties: false,
   properties: {
     id: uuidSchema(),
     title: { type: 'string' },
     description: { type: 'string' },
     skillId: { type: ['string', 'null'], format: 'uuid' },
+    skillName: { type: ['string', 'null'], description: 'Skill display name resolved from the skill catalogue; null when the task has no skill' },
     estimatedMinutes: { type: ['integer', 'null'], minimum: 1, maximum: 600 },
     order: { type: 'integer' },
     status: { type: 'string', enum: [...TASK_STATUSES] },

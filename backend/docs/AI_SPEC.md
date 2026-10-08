@@ -122,6 +122,7 @@ The MVP requires these AI capabilities:
 4. Skill Gap Explanation
 5. Personalized Roadmap Generation
 6. Challenge Feedback
+7. Learning Search Intent (resource discovery)
 ```
 
 The system should be designed so additional AI capabilities can be added later.
@@ -494,6 +495,69 @@ owner-scoped custom skills when a name is not in the catalogue) and the AI's
 `careerName` must match the participant's stored career or the result is
 rejected. The AI never writes these requirements into the shared career
 catalogue.
+
+---
+
+# 15a. Learning Search Intent
+
+`GET /learning/resources` uses the AI only to **plan** a discovery. The AI never
+produces resources — links, video ids, channel names and hostnames are
+structurally impossible in its output because every returned resource comes from
+an external provider executing the AI's search queries.
+
+## Purpose
+
+Turn a user-requested skill (validated to 1–120 normalized characters) into a
+grounded search plan that finds real, beginner-appropriate learning content.
+
+## Input (backend-supplied, read-only)
+
+```text
+skillName              normalized skill name from the authenticated request
+taskTitle              current roadmap task for this skill, if any (optional)
+taskDescription        same task's description (optional)
+gapStatus / gapPriority  skill-gap status/priority for this skill (optional)
+```
+
+The skill-gap and roadmap context makes the intent match what the participant
+is actually working on, without ever sending content written by the user into
+prompts beyond what the catalog of approved skills/roadmap already contains.
+
+## Output (structured JSON, Zod-validated)
+
+```json
+{
+  "skill": "Excel",
+  "intent": "Learn Excel formulas, pivot tables and data analysis workflows.",
+  "queries": ["Excel formulas tutorial", "Excel pivot tables for beginners"],
+  "preferredTypes": ["video", "course"]
+}
+```
+
+Constraints (docs/AI_SPEC.md validation is enforced by
+`learningSearchIntentOutputSchema`):
+
+```text
+skill            string 1–120 chars, must equal the requested skill exactly
+intent           string 1–300 chars, plain-text learning goal
+queries          1–5 queries, each 3–200 chars
+preferredTypes   non-empty subset of video / article / course
+```
+
+## Grounding rules
+
+* The AI returns only `skill`, `intent`, `queries` and `preferredTypes`.
+* The AI NEVER returns URLs, links, video ids, channel names, playlist ids or
+  hostnames. A hallucinated link is rejected before reaching any provider.
+* The AI's `skill` must match the requested skill name exactly; a mismatch
+  (ungrounded intent) returns `422 AI_OUTPUT_INVALID`.
+* Queries default to a BEGINNER level and surface recent, reputable content.
+* Unknown/unsupported resource types are rejected, not ignored
+  (`400 VALIDATION_ERROR`).
+
+The provider resolves `queries` into up to `MAX_PROVIDER_RESULTS_PER_QUERY` (5)
+candidates per query, then a deterministic ranker and final Zod validation run
+before anything is returned or cached (`docs/API_CONTRACT.md §21a`).
 
 ---
 

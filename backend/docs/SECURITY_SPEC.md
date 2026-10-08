@@ -680,9 +680,17 @@ Especially:
 /auth/reset-password
 /ai/*
 /challenges/*/submit
+/learning/resources
 ```
 
 AI endpoints should have stricter limits because they may consume external API resources.
+
+Applying limits:
+
+```text
+/learning/resources   20 / 60s per IP (burst) — the provider quota is also
+                      bounded per call: 2 search queries, max 5 results each.
+```
 
 ---
 
@@ -733,6 +741,38 @@ Requirements:
 * Safe error handling.
 
 Never allow anonymous users to trigger expensive AI operations unless explicitly designed for it.
+
+---
+
+# 28a. Learning Resource Discovery Security
+
+`GET /learning/resources` (docs/API_CONTRACT.md §21a) calls the AI service and
+an external resource provider (YouTube Data API v3) on behalf of an
+authenticated participant.
+
+Requirements:
+
+* **Authentication required.** Anonymous callers get `401`.
+* **Rate limited.** `20 / 60s` burst per IP prevents quota abuse.
+* **External API key secrecy.** `YOUTUBE_API_KEY` is read from environment only,
+  never logged, returned, or included in any error message or prompt.
+* **Provider cost is bounded per request.** At most 2 AI search queries and
+  `MAX_PROVIDER_RESULTS_PER_QUERY` (5) candidates per query; resources are
+  capped at `MAX_RESULTS` (8). One discovery ≤ ~3 external API calls
+  (search + videos detail), so one misbehaving refresh cannot burn quota.
+* **The AI cannot return content URLs.** Its structured output is restricted to
+  skill/intent/queries/preferredTypes; resource URLs are only ever produced by
+  the provider and validated server-side.
+* **External URLs are validated, not trusted.** Every returned URL must be
+  HTTPS, thumbnails/embed must be YouTube-owned hosts, and non-embeddable
+  videos are dropped. This blocks `http://`, `javascript:` and other schemes
+  from entering the response.
+* **User data is minimized.** Only the normalized skill name plus optional
+  roadmap-task/gap context is sent to the AI; no credentials, emails, or other
+  participant PII.
+* **Safe failure.** Provider/AI downtime returns `503 LEARNING_SERVICE_UNAVAILABLE`
+  (or stale cached results deemed safe); provider errors are never surfaced raw,
+  and nothing is cached unless the final deterministic validation passed.
 
 ---
 

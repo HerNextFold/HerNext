@@ -80,10 +80,26 @@ export const careerRequirementsOutputSchema = z.object({
     .max(15),
 });
 
+/**
+ * Learning-resource search intent (docs/AI_SPEC.md §15a, docs/API_CONTRACT.md
+ * §21a). The AI produces ONLY the search intent - the skill it was asked about,
+ * a plain-text learning goal, and search queries. It must never return URLs,
+ * video ids or hostnames: actual resources always come from an external
+ * provider (YouTube Data API v3) using the provider-returned identifiers, so
+ * the AI can never fabricate a link.
+ */
+export const learningSearchIntentOutputSchema = z.object({
+  skill: z.string().min(1).max(120),
+  intent: z.string().min(1).max(300),
+  queries: z.array(z.string().min(3).max(200)).min(1).max(5),
+  preferredTypes: z.array(z.enum(['video', 'article', 'course'])).min(1).max(3),
+});
+
 export type CareerImpactOutput = z.infer<typeof careerImpactOutputSchema>;
 export type TransferableSkillsOutput = z.infer<typeof transferableSkillsOutputSchema>;
 export type RoadmapOutput = z.infer<typeof roadmapOutputSchema>;
 export type CareerRequirementsOutput = z.infer<typeof careerRequirementsOutputSchema>;
+export type LearningSearchIntentOutput = z.infer<typeof learningSearchIntentOutputSchema>;
 
 /* Request validation schemas (docs/API_CONTRACT.md §7). */
 export const aiExperienceIdParamsSchema = z.object({

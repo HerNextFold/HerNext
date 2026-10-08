@@ -21,6 +21,9 @@ import { CatalogueService } from './modules/catalogue/catalogue.service.js';
 import { registerCatalogueModule } from './modules/catalogue/catalogue.routes.js';
 import { AiService } from './modules/ai/ai.service.js';
 import { registerAiModule } from './modules/ai/ai.routes.js';
+import { LearningService } from './modules/learning/learning.service.js';
+import { registerLearningModule } from './modules/learning/learning.routes.js';
+import { YouTubeProvider } from './modules/learning/providers/youtube.provider.js';
 import { AchievementService } from './modules/achievements/achievements.service.js';
 import { registerAchievementModule } from './modules/achievements/achievements.routes.js';
 import { ProgressService } from './modules/progress/progress.service.js';
@@ -44,6 +47,16 @@ export interface BuildAppOptions {
   config?: AppConfig;
   /** Override logger behaviour; defaults to silent in the test environment. */
   logger?: boolean;
+  /**
+   * Override the AI service (used by tests to mock the LLM provider without
+   * network access). The learning module shares this service.
+   */
+  ai?: AiService;
+  /**
+   * Override the learning discovery service (used by tests to mock the
+   * external resource provider and AI without network access).
+   */
+  learning?: LearningService;
 }
 
 /** Builds a fully-configured Fastify application without starting the server. */
@@ -88,7 +101,19 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     apiKey: config.aiApiKey,
     model: config.aiModel,
   });
-  registerAiModule(app, new AiService(provider));
+  const aiService = options.ai ?? new AiService(provider);
+  registerAiModule(app, aiService);
+
+  // Lazy learning-resource discovery (docs/API_CONTRACT.md §24). Shares the AI
+  // service (search-intent generation) and a YouTube Data API v3 provider
+  // built from YOUTUBE_API_KEY. When the key is missing the provider reports
+  // itself unconfigured and the learning endpoint fails safely with 503 rather
+  // than pretending discovery works. Tests inject a LearningService bound to
+  // fake providers via the `learning` option.
+  registerLearningModule(
+    app,
+    options.learning ?? new LearningService(aiService, new YouTubeProvider({ apiKey: config.youtubeApiKey })),
+  );
 
   const achievementService = new AchievementService();
   registerAchievementModule(app, achievementService);

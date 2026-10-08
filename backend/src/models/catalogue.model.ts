@@ -172,6 +172,24 @@ export interface SkillIdLookup {
 }
 
 /**
+ * Read-only skill lookup by normalized name (case-insensitive). Unlike
+ * findOrCreateSkillByName this never inserts; the learning-resource discovery
+ * endpoint uses it to report whether a requested skill is a catalogue skill or
+ * a user-created custom skill without mutating anything.
+ */
+export async function findSkillByName(
+  db: Db | undefined,
+  rawName: string,
+): Promise<SkillRow | null> {
+  const name = normalizeCareerName(rawName);
+  return queryRow<SkillRow>(
+    db ?? getPool(),
+    'SELECT * FROM "skills" WHERE lower("name") = lower($1) LIMIT 1',
+    [name],
+  );
+}
+
+/**
  * Resolves a participant-typed skill name to a "skills" row.
  *
  * An approved catalogue skill always wins, matched case-insensitively, so

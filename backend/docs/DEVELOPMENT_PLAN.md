@@ -1112,6 +1112,35 @@ Every production endpoint should document:
 
 ---
 
+# 39a. Dynamic Learning Resource Discovery
+
+Implemented as part of the AI journey (see AGENTS.md §22). `GET
+/api/v1/learning/resources` returns grounded learning content for a skill
+(YouTube Data API v3) without persisting anything or adding a table.
+
+## Design constraints
+
+* **AI plans, never fabricates.** The AI returns skill/intent/queries/preferred
+  types only — never URLs. Every returned resource is produced by the provider
+  and passes deterministic HTTPS/validation and ranking.
+* **Lazy.** Discovery runs only when the endpoint is called; roadmap generation
+  never triggers it.
+* **Cached in-process** (`LEARNING_CACHE_TTL_MS` = 24 h) by normalized
+  skill + requested types; a failed refresh falls back to stale cache; empty
+  results are returned honestly and never cached.
+* **Bounded cost.** Per request: ≤ 2 search queries, ≤ 5 candidates each,
+  ≤ 8 ranked results, ≤ 3 external API calls. `20 / 60s` rate limit per IP.
+* **Fail safe.** Unconfigured provider (`YOUTUBE_API_KEY` unset) or provider/AI
+  downtime → `503 LEARNING_SERVICE_UNAVAILABLE` without pretending discovery
+  works.
+* **No schema change.** No new table; `YOUTUBE_API_KEY` is environment-only.
+
+Module: `src/modules/learning/` (`cache.ts`, `learning.service.ts`,
+`learning.controller.ts`, `learning.routes.ts`, `learning.schemas.ts`,
+`http.ts`, `validate.ts`, `rank.ts`, `providers/youtube.provider.ts`).
+
+---
+
 # 40. Frontend Integration
 
 Once the API is stable:
@@ -1205,7 +1234,12 @@ AI_MODEL
 OPENAI_API_KEY
 AI_API_KEY
 LOG_LEVEL
+YOUTUBE_API_KEY
 ```
+
+`YOUTUBE_API_KEY` enables dynamic learning-resource discovery
+(`GET /learning/resources`, docs/API_CONTRACT.md §21a). When unset the endpoint
+fails safe with `503 LEARNING_SERVICE_UNAVAILABLE`; nothing else is affected.
 
 `AI_PROVIDER` selects the LLM provider implementation (default `groq` for the
 OpenAI-compatible Groq Chat Completions API; `openai` and `gemini` are also

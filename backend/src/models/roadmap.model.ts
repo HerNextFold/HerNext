@@ -23,6 +23,8 @@ export interface RoadmapTaskRow {
   title: string;
   description: string;
   skillId: string | null;
+  /** Skill display name resolved via LEFT JOIN "skills". Null when skillId is null. */
+  skillName: string | null;
   estimatedMinutes: number | null;
   order: number;
   status: TaskStatus;
@@ -68,7 +70,8 @@ export async function insertRoadmapTask(
     db,
     `INSERT INTO "roadmap_tasks"
        ("roadmapId", "phase", "title", "description", "skillId", "estimatedMinutes", "order")
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *, NULL::text AS "skillName"`,
     [input.roadmapId, input.phase, input.title, input.description, input.skillId, input.estimatedMinutes, input.order],
   );
   if (row === null) {
@@ -131,7 +134,11 @@ export async function findLatestRoadmapWithTasks(
   }
   const tasks = await queryText<RoadmapTaskRow>(
     pool,
-    'SELECT * FROM "roadmap_tasks" WHERE "roadmapId" = $1 ORDER BY "phase", "order"',
+    `SELECT t.*, s."name" AS "skillName"
+     FROM "roadmap_tasks" t
+     LEFT JOIN "skills" s ON s."id" = t."skillId"
+     WHERE t."roadmapId" = $1
+     ORDER BY t."phase", t."order"`,
     [roadmap.id],
   );
   return { roadmap, tasks };
@@ -156,7 +163,11 @@ export async function findCurrentRoadmapWithTasks(
   }
   const tasks = await queryText<RoadmapTaskRow>(
     pool,
-    `SELECT * FROM "roadmap_tasks" WHERE "roadmapId" = $1 ORDER BY "phase", "order"`,
+    `SELECT t.*, s."name" AS "skillName"
+     FROM "roadmap_tasks" t
+     LEFT JOIN "skills" s ON s."id" = t."skillId"
+     WHERE t."roadmapId" = $1
+     ORDER BY t."phase", t."order"`,
     [roadmap.id],
   );
   return { roadmap, tasks };
@@ -178,7 +189,11 @@ export async function findRoadmapById(
   }
   const tasks = await queryText<RoadmapTaskRow>(
     pool,
-    'SELECT * FROM "roadmap_tasks" WHERE "roadmapId" = $1 ORDER BY "phase", "order"',
+    `SELECT t.*, s."name" AS "skillName"
+     FROM "roadmap_tasks" t
+     LEFT JOIN "skills" s ON s."id" = t."skillId"
+     WHERE t."roadmapId" = $1
+     ORDER BY t."phase", t."order"`,
     [roadmap.id],
   );
   return { roadmap, tasks };
@@ -205,9 +220,10 @@ export async function findOwnedTask(
 ): Promise<RoadmapTaskRow | null> {
   return queryRow<RoadmapTaskRow>(
     db ?? getPool(),
-    `SELECT t.*
+    `SELECT t.*, s."name" AS "skillName"
      FROM "roadmap_tasks" t
      JOIN "roadmaps" r ON r."id" = t."roadmapId"
+     LEFT JOIN "skills" s ON s."id" = t."skillId"
      WHERE t."id" = $1 AND r."userId" = $2`,
     [taskId, userId],
   );
@@ -233,8 +249,9 @@ export async function updateTaskStatus(
            "completedAt" = ${completedAtSql},
            "updatedAt" = now()
      FROM "roadmaps" AS r
+     LEFT JOIN "skills" AS s ON s."id" = t."skillId"
      WHERE t."id" = $2 AND r."id" = t."roadmapId" AND r."userId" = $3
-     RETURNING t.*`,
+     RETURNING t.*, s."name" AS "skillName"`,
     [status, taskId, userId],
   );
 }
@@ -251,7 +268,11 @@ export async function findTasksForTask(
   }
   return queryText<RoadmapTaskRow>(
     db ?? getPool(),
-    'SELECT * FROM "roadmap_tasks" WHERE "roadmapId" = $1 ORDER BY "phase", "order"',
+    `SELECT t.*, s."name" AS "skillName"
+     FROM "roadmap_tasks" t
+     LEFT JOIN "skills" s ON s."id" = t."skillId"
+     WHERE t."roadmapId" = $1
+     ORDER BY t."phase", t."order"`,
     [task.roadmapId],
   );
 }

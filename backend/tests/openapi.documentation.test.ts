@@ -56,6 +56,7 @@ const ROUTE_MATRIX: DocMatrixEntry[] = [
   { method: 'GET', path: '/api/v1/progress' },
   { method: 'GET', path: '/api/v1/progress/summary' },
   { method: 'GET', path: '/api/v1/progress/next-action' },
+  { method: 'GET', path: '/api/v1/learning/resources' },
   { method: 'PATCH', path: '/api/v1/roadmaps/tasks/:taskId', hasBody: true },
 
   { method: 'GET', path: '/api/v1/challenges' },

@@ -58,6 +58,13 @@ const appEnvSchema = z.object({
   BREVO_API_KEY: z.string().optional(),
   BREVO_SENDER_EMAIL: z.string().email('BREVO_SENDER_EMAIL must be a valid email').optional(),
   BREVO_SENDER_NAME: z.string().optional(),
+  // External learning-resource discovery (docs/API_CONTRACT.md §21a). Optional:
+  // when YOUTUBE_API_KEY is missing the learning endpoint fails safely (503)
+  // instead of pretending dynamic discovery works. SERP_API_KEY is reserved
+  // for a future allowlisted article/course search provider and is unused in
+  // the current MVP.
+  YOUTUBE_API_KEY: z.string().optional(),
+  SERP_API_KEY: z.string().optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -80,6 +87,8 @@ export type AppConfig = {
   brevoApiKey: string | undefined;
   brevoSenderEmail: string | undefined;
   brevoSenderName: string | undefined;
+  youtubeApiKey: string | undefined;
+  serpApiKey: string | undefined;
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
 };
 
@@ -153,6 +162,8 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     brevoApiKey: env.BREVO_API_KEY,
     brevoSenderEmail: env.BREVO_SENDER_EMAIL,
     brevoSenderName: env.BREVO_SENDER_NAME,
+    youtubeApiKey: env.YOUTUBE_API_KEY,
+    serpApiKey: env.SERP_API_KEY,
     logLevel: env.LOG_LEVEL,
   };
 }

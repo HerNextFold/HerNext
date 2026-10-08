@@ -116,6 +116,13 @@ export function clearSession(): void {
   try {
     localStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(USER_SESSION_KEY)
+    // Clear any saved onboarding drafts so they do not survive a session/account boundary.
+    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('hernext_onboarding_draft:')) {
+        localStorage.removeItem(key)
+      }
+    }
     window.dispatchEvent(new Event(SESSION_ENDED_EVENT))
   } catch {
     // Storage being unavailable must not stop the caller from continuing.
