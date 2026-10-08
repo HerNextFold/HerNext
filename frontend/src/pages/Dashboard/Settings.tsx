@@ -209,6 +209,10 @@ const SettingsPage: React.FC = () => {
       await deleteCurrentAccount();
       setShowDeleteAccountModal(false);
       clearSession();
+      // Extra cleanup for this specific email in case of any race
+      try {
+        localStorage.removeItem(`hernext_onboarding_draft:${user.email.trim().toLowerCase()}`);
+      } catch {}
       showToast('Your account has been deleted.');
       navigate('/sign-in', { replace: true });
     } catch (err) {

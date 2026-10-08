@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -20,6 +20,7 @@ import {
 import PurpleBackgroundDots from "../components/dashboard/PurpleBackgroundDots";
 import Button from "../components/Button";
 import { useUserContext, type OnboardingState } from "../context/UserContext";
+import { hasActiveSession } from "../lib/session";
 import {
   ApiError,
   completeOnboarding,
@@ -64,13 +65,13 @@ function mapWorkSituationToEmploymentType(
  */
 function mapYearsExperienceToNumber(yearsExperience: string): number {
   switch (yearsExperience) {
-    case "0–1 years":
+    case "0-1 years":
       return 0;
-    case "1–3 years":
+    case "1-3 years":
       return 2;
-    case "3–5 years":
+    case "3-5 years":
       return 4;
-    case "5–8 years":
+    case "5-8 years":
       return 6;
     case "8+ years":
       return 8;
@@ -448,7 +449,7 @@ function loadOnboardingDraft(email: string): Partial<OnboardingDraft> {
 }
 
 function saveOnboardingDraft(email: string, draft: OnboardingDraft): void {
-  if (!email) return;
+  if (!email || !hasActiveSession()) return;
   try {
     localStorage.setItem(onboardingDraftKey(email), JSON.stringify(draft));
   } catch {
@@ -466,7 +467,10 @@ export default function Onboarding() {
     onboardingCompleted,
     setCareerProfile,
   } = useUserContext();
-  const [draft] = useState(() => loadOnboardingDraft(user.email));
+  const [draft] = useState(() => {
+    if (!user.email || !hasActiveSession()) return {};
+    return loadOnboardingDraft(user.email);
+  });
   const [currentStep, setCurrentStep] = useState<number>(
     draft.currentStep ?? 1,
   );
@@ -627,7 +631,7 @@ export default function Onboarding() {
    * downloads"). That text was stored as their experience and then fed straight
    * into the AI assessment and the Career Passport, so the app ended up
    * asserting a history the participant never claimed - which docs/AI_SPEC.md
-   * and backend/AGENTS.md Â§18 explicitly forbid.
+   * and backend/AGENTS.md §18 explicitly forbid.
    *
    * Now only the heading is added and the participant supplies the content. A
    * blank prompt is recoverable; invented history is not.
@@ -712,6 +716,7 @@ export default function Onboarding() {
 
   useEffect(() => {
     if (isCompleted) return;
+    if (!user.email || !hasActiveSession()) return;
     saveOnboardingDraft(user.email, {
       currentStep,
       currentRole,
@@ -1178,7 +1183,7 @@ export default function Onboarding() {
                 <div className="flex items-center gap-3 rounded-xl border border-peach-200 bg-peach-50/70 p-4 text-xs text-plum-950">
                   <Clock size={18} className="shrink-0 text-plum-700" />
                   <span>
-                    <strong>Takes about 5â€“7 minutes.</strong> You can save
+                    <strong>Takes about 5–7 minutes.</strong> You can save
                     your progress and come back at any time.
                   </span>
                 </div>
@@ -1302,10 +1307,10 @@ export default function Onboarding() {
                         className="mt-1.5 w-full rounded-xl border border-hairline bg-slate-50/50 px-3.5 py-2.5 text-sm text-ink outline-none focus:border-plum-600 focus:bg-white"
                       >
                         <option value="">Select your experience</option>
-                        <option>0–1 years</option>
-                        <option>1–3 years</option>
-                        <option>3–5 years</option>
-                        <option>5–8 years</option>
+                        <option>0-1 years</option>
+                        <option>1-3 years</option>
+                        <option>3-5 years</option>
+                        <option>5-8 years</option>
                         <option>8+ years</option>
                       </select>
                     </div>
@@ -1365,14 +1370,14 @@ export default function Onboarding() {
                     onClick={handlePrevStep}
                     className="px-6 py-2.5 text-xs font-semibold"
                   >
-                    â† Back
+                    ← Back
                   </Button>
                   <Button
                     variant="primary"
                     onClick={handleNextStep}
                     className="px-6 py-2.5 text-xs font-semibold"
                   >
-                    Continue to Skills â†’
+                    Continue to Skills →
                   </Button>
                 </div>
               </motion.div>
@@ -1619,14 +1624,14 @@ export default function Onboarding() {
                     onClick={handlePrevStep}
                     className="px-6 py-2.5 text-xs font-semibold"
                   >
-                    â† Back
+                    ← Back
                   </Button>
                   <Button
                     variant="primary"
                     onClick={handleNextStep}
                     className="px-6 py-2.5 text-xs font-semibold"
                   >
-                    Continue to Experience â†’
+                    Continue to Experience →
                   </Button>
                 </div>
               </motion.div>
@@ -1713,14 +1718,14 @@ export default function Onboarding() {
                     onClick={handlePrevStep}
                     className="px-6 py-2.5 text-xs font-semibold"
                   >
-                    â† Back
+                    ← Back
                   </Button>
                   <Button
                     variant="primary"
                     onClick={handleNextStep}
                     className="px-6 py-2.5 text-xs font-semibold"
                   >
-                    Continue to Goals â†’
+                    Continue to Goals →
                   </Button>
                 </div>
               </motion.div>
@@ -1889,14 +1894,14 @@ export default function Onboarding() {
                     onClick={handlePrevStep}
                     className="px-6 py-2.5 text-xs font-semibold"
                   >
-                    â† Back
+                    ← Back
                   </Button>
                   <Button
                     variant="primary"
                     onClick={handleNextStep}
                     className="px-6 py-2.5 text-xs font-semibold"
                   >
-                    Continue to Review â†’
+                    Continue to Review →
                   </Button>
                 </div>
               </motion.div>
@@ -2158,14 +2163,14 @@ export default function Onboarding() {
                     onClick={handlePrevStep}
                     className="px-6 py-2.5 text-xs font-semibold"
                   >
-                    â† Back
+                    ← Back
                   </Button>
                   <Button
                     variant="primary"
                     onClick={handleNextStep}
                     className="px-8 py-3 text-xs font-bold shadow-md"
                   >
-                    Start My Career Analysis â†’
+                    Start My Career Analysis →
                   </Button>
                 </div>
               </motion.div>
